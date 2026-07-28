@@ -9,6 +9,7 @@ Auth: header `Authorization: Bearer <MARKET_API_TOKEN>`.
 
 - `GET /products?supermercado=&category=&q=&ean13=&is_offer=&is_new=&limit=&offset=`
   — `is_offer`/`is_new` aceptan `true|false|1|0|si|no`; cualquier otro valor no filtra.
+  Ver abajo cómo funciona `q`.
 - `GET /supermercados` — conteo de productos por cadena
 - `POST /comparar-bolsa` — cuánto costaría la misma bolsa en otra cadena
 - `GET /healthz` — sin auth
@@ -31,6 +32,33 @@ chico y que el precio, aunque real, no compara la misma cantidad.
 
 Acepta `min_confidence` en el body para mover el umbral por request; el valor
 por defecto sale de `MARKET_MATCH_THRESHOLD` (0.6 si no está).
+
+### Búsqueda (`?q=`)
+
+La query se parte en tokens y se exigen **todos**, en cualquier orden y posición,
+contra un índice FTS5 (`src/lib/search.js`). Así `agua bronchales` encuentra
+"Agua mineral grande Bronchales", que con el `LIKE '%...%'` de antes daba 0
+porque exigía subcadena contigua. Los acentos son indiferentes en los dos
+sentidos (`higienico` encuentra "higiénico" y al revés), que es algo que `LIKE`
+no da: sólo ignora mayúsculas en ASCII.
+
+Los resultados se ordenan por relevancia con `bm25()`, así que un producto que
+coincide en un término raro sale antes que uno que sólo coincide en el genérico.
+Sin `q` el orden sigue siendo por `id`, como antes.
+
+Se busca por token completo y sólo se cae a prefijo si así no hay nada, para que
+`agua` no devuelva aguacates pero `choco` sí encuentre "chocolate". El efecto
+lateral es que una palabra escrita a medias no encuentra sus otras flexiones
+mientras existan coincidencias exactas: `catalan` trae "Vichy Catalán" pero no
+"Crema catalana".
+
+**Búsqueda por formato**: si la query trae una cantidad (`agua 50cl`,
+`leche 1,5l`, `arroz 2kg`, `papel 4 rollos`) se saca del texto y se filtra por
+tamaño con un margen del 10%. Hace falta porque el formato no está en el nombre:
+mercadona los llama "pequeña/mediana/grande". El tamaño sale de
+`price_eur / price_per_unit_eur`, igual que en el comparador. Ojo: es el tamaño
+**total** del envase, así que `agua 50cl` encuentra la botella de 50 cl pero no
+el pack de 6x50 cl (que mide 3 l).
 
 ### Cómo se emparejan los productos
 
@@ -58,6 +86,10 @@ node src/scripts/ingest.js --file=productos.jsonl --supermercado=carrefour
 las columnas que falten con `ALTER TABLE` (aditivo e idempotente). Sobre una
 base ya poblada el `CREATE TABLE IF NOT EXISTS` no alcanza, porque no toca una
 tabla que ya está creada. No recrea la tabla ni reescribe filas.
+
+También crea el índice FTS5 de búsqueda y lo rellena con lo que ya hubiera en la
+tabla (la tabla virtual nace vacía). Eso pasa una sola vez; después lo mantienen
+tres triggers sobre `products`, así que el ingest no tiene que hacer nada.
 
 ## Desarrollo local
 

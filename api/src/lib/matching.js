@@ -116,6 +116,12 @@ function normalizeName(name) {
     .trim();
 }
 
+// Todas las formas crudas de measure_unit que caen en una familia canónica, para
+// poder filtrar por unidad en SQL en vez de traerse las filas a JS.
+function unitAliases(family) {
+  return Object.keys(UNITS).filter((key) => UNITS[key][0] === family);
+}
+
 function canonicalUnit(measureUnit) {
   if (!measureUnit) return null;
   const key = stripAccents(String(measureUnit).toLowerCase()).trim();
@@ -386,9 +392,11 @@ function findBestMatch(origin, index, options = {}) {
 module.exports = {
   DEFAULT_THRESHOLD,
   DEFAULT_WEIGHTS,
+  STOPWORDS,
   normalizeName,
   parseQuantity,
   productSize,
+  unitAliases,
   tokenize,
   prepare,
   buildIndex,

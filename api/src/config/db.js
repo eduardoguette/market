@@ -56,4 +56,52 @@ db.exec(`
     ON products(supermercado) WHERE is_new = 1;
 `);
 
+// Índice sobre la expresión del tamaño derivado, para las búsquedas por formato
+// ("agua 50cl"). Sin él, filtrar por tamaño obliga a recorrer la tabla entera
+// porque el valor no está en ninguna columna. Parcial, porque las filas sin
+// precio por unidad no tienen tamaño calculable y no hacen falta en el índice.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_products_size
+    ON products(price_eur / price_per_unit_eur) WHERE price_per_unit_eur > 0;
+`);
+
+// Índice de texto para la búsqueda por nombre. Un LIKE '%token%' no puede usar
+// índice (comodín a la izquierda), así que escanea la tabla entera por cada
+// token; con el catálogo creciendo eso no aguanta. FTS5 es índice invertido, y
+// `remove_diacritics 2` resuelve además que "higienico" encuentre "higiénico"
+// (LIKE sólo ignora mayúsculas en ASCII).
+//
+// content='products' lo deja como índice externo: no duplica los nombres, los lee
+// de products, así que la tabla sigue siendo la única fuente de verdad. Los
+// triggers lo mantienen sincronizado con cualquier INSERT/UPDATE/DELETE.
+const hadFts = db
+  .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products_fts'")
+  .get();
+
+db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
+    name,
+    content='products',
+    content_rowid='id',
+    tokenize="unicode61 remove_diacritics 2"
+  );
+
+  CREATE TRIGGER IF NOT EXISTS products_fts_insert AFTER INSERT ON products BEGIN
+    INSERT INTO products_fts(rowid, name) VALUES (new.id, new.name);
+  END;
+  CREATE TRIGGER IF NOT EXISTS products_fts_delete AFTER DELETE ON products BEGIN
+    INSERT INTO products_fts(products_fts, rowid, name) VALUES ('delete', old.id, old.name);
+  END;
+  CREATE TRIGGER IF NOT EXISTS products_fts_update AFTER UPDATE ON products BEGIN
+    INSERT INTO products_fts(products_fts, rowid, name) VALUES ('delete', old.id, old.name);
+    INSERT INTO products_fts(rowid, name) VALUES (new.id, new.name);
+  END;
+`);
+
+// La tabla virtual nace vacía, así que sobre una base ya poblada hay que indexar
+// lo que ya está. Se hace sólo la primera vez: después los triggers alcanzan.
+if (!hadFts) {
+  db.exec("INSERT INTO products_fts(products_fts) VALUES ('rebuild')");
+}
+
 module.exports = db;
