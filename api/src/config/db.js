@@ -79,6 +79,16 @@ db.exec(`
     ON products(supermercado, price_per_unit_eur);
 `);
 
+// Para listar los pasillos de una cadena (GET /pasillos), que es un
+// GROUP BY category dentro de un supermercado. Con este índice la consulta sale
+// por covering index y desaparece el temp B-tree del GROUP BY: sobre las 36.583
+// filas de alcampo baja de 12,7 ms a 4 ms, y es la pantalla que se abre al
+// filtrar por cadena, así que se pide a menudo.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_products_super_category
+    ON products(supermercado, category);
+`);
+
 // Índice sobre la expresión del tamaño derivado, para las búsquedas por formato
 // ("agua 50cl"). Sin él, filtrar por tamaño obliga a recorrer la tabla entera
 // porque el valor no está en ninguna columna. Parcial, porque las filas sin

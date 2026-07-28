@@ -43,7 +43,34 @@ function list(req, res) {
 }
 
 function supermercados(req, res) {
-  res.json(productModel.countBySupermercado());
+  // Con is_new/is_offer devuelve sólo las cadenas que tienen algo, para que la
+  // UI no ofrezca un filtro de novedades en una cadena que no trae ninguna.
+  res.json(
+    productModel.countBySupermercado({
+      is_offer: parseBoolFlag(req.query.is_offer),
+      is_new: parseBoolFlag(req.query.is_new),
+    })
+  );
 }
 
-module.exports = { list, supermercados, parseBoolFlag };
+// Los pasillos que tiene una cadena, para poder navegarla sin escribir nada en
+// el buscador. Es un GROUP BY sobre `category`, que hoy ya guarda la taxonomía
+// propia de cada cadena.
+function pasillos(req, res) {
+  const minTotal = parseInt(req.query.min_total, 10) || 0;
+  const limitRaw = parseInt(req.query.limit, 10);
+  const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : undefined;
+
+  const pasillosList = productModel.countByAisle(
+    {
+      supermercado: req.query.supermercado,
+      is_offer: parseBoolFlag(req.query.is_offer),
+      is_new: parseBoolFlag(req.query.is_new),
+    },
+    { minTotal, limit }
+  );
+
+  res.json({ total: pasillosList.length, min_total: minTotal, pasillos: pasillosList });
+}
+
+module.exports = { list, supermercados, pasillos, parseBoolFlag };

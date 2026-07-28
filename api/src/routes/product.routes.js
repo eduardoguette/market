@@ -7,6 +7,7 @@ const router = Router();
 
 router.get("/products", requireToken, productController.list);
 router.get("/supermercados", requireToken, productController.supermercados);
+router.get("/pasillos", requireToken, productController.pasillos);
 router.post("/comparar-bolsa", requireToken, comparisonController.compareBasket);
 
 module.exports = router;

@@ -160,10 +160,41 @@ function findAll(filters, { limit, offset, sort }) {
   return { total: matched.length, items: matched.slice(offset, offset + limit) };
 }
 
-function countBySupermercado() {
+function countBySupermercado(filters = {}) {
+  const { clauses, params } = buildWhere(filters);
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   return db
-    .prepare("SELECT supermercado, COUNT(*) AS total FROM products GROUP BY supermercado")
-    .all();
+    .prepare(
+      `SELECT p.supermercado, COUNT(*) AS total FROM products p ${where}
+       GROUP BY p.supermercado ORDER BY total DESC, p.supermercado`
+    )
+    .all(...params);
+}
+
+// Los pasillos de una cadena son los valores propios de su columna `category`:
+// hoy ya son la taxonomía de cada cadena, sin nada canónico por encima. Se
+// ordenan por número de productos porque hay cadenas con 537 pasillos y 73 de
+// ellos con un solo producto, así que alfabético dejaría lo útil abajo.
+function countByAisle(filters = {}, { minTotal = 0, limit } = {}) {
+  const { clauses, params } = buildWhere(filters);
+  // Las filas sin categoría no son un pasillo: aldi tiene 103 así.
+  clauses.push("p.category IS NOT NULL AND TRIM(p.category) != ''");
+
+  const having = minTotal > 0 ? "HAVING COUNT(*) >= ?" : "";
+  if (minTotal > 0) params.push(minTotal);
+
+  // El desempate por nombre hace estable el orden entre pasillos con el mismo
+  // número de productos, que en las cadenas granulares son muchísimos.
+  const sql = `SELECT p.supermercado, p.category AS aisle, COUNT(*) AS total
+                 FROM products p
+                WHERE ${clauses.join(" AND ")}
+                GROUP BY p.supermercado, p.category
+                ${having}
+                ORDER BY total DESC, p.category
+                ${limit ? "LIMIT ?" : ""}`;
+  if (limit) params.push(limit);
+
+  return db.prepare(sql).all(...params);
 }
 
 function findByIds(ids) {
@@ -223,6 +254,7 @@ function replaceSupermercado(supermercado, rows) {
 module.exports = {
   SORTS,
   findAll,
+  countByAisle,
   findByIds,
   findAllBySupermercado,
   countBySupermercado,

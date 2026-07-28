@@ -10,9 +10,41 @@ Auth: header `Authorization: Bearer <MARKET_API_TOKEN>`.
 - `GET /products?supermercado=&category=&q=&ean13=&is_offer=&is_new=&sort=&limit=&offset=`
   — `is_offer`/`is_new` aceptan `true|false|1|0|si|no`; cualquier otro valor no filtra.
   Ver abajo cómo funcionan `q` y `sort`.
-- `GET /supermercados` — conteo de productos por cadena
+- `GET /supermercados?is_offer=&is_new=` — conteo de productos por cadena. Con
+  `is_new`/`is_offer` devuelve **sólo las cadenas que tienen algo**, para no
+  ofrecer un filtro de novedades en una cadena que no trae ninguna.
+- `GET /pasillos?supermercado=&min_total=&limit=&is_offer=&is_new=` — los pasillos
+  de una cadena
 - `POST /comparar-bolsa` — cuánto costaría la misma bolsa en otra cadena
 - `GET /healthz` — sin auth
+
+### GET /pasillos
+
+Para poder navegar una cadena sin escribir nada en el buscador.
+
+```json
+{ "total": 149, "min_total": 0,
+  "pasillos": [ { "supermercado": "mercadona", "aisle": "Leche y bebidas vegetales", "total": 118 } ] }
+```
+
+El `aisle` sirve tal cual para `GET /products?category=<aisle>&supermercado=<cadena>`,
+que es la otra mitad del caso: entrar en el pasillo y ver sus productos.
+
+Vienen **ordenados por número de productos**, no alfabéticamente, porque la
+granularidad es muy desigual entre cadenas: mercadona tiene 149 pasillos con una
+mediana de 27 productos, pero ahorramás tiene 537 con mediana 6 y 73 de un solo
+producto. Con `min_total` se recorta esa cola (`min_total=20` deja ahorramás en 76
+pasillos). Los empates desempatan por nombre, así que el orden es estable.
+
+Sin `supermercado` devuelve los pasillos de todas las cadenas; cada fila lleva
+siempre la suya, así que la forma de la respuesta no cambia según los parámetros.
+Las filas sin `category` no se listan (aldi tiene 103).
+
+Ojo, **muestra los pasillos tal como los da cada cadena**: carrefour tiene un solo
+"pasillo" (`Bebidas`) para todo su catálogo, y alcampo lista `Folletos y
+Promociones` y `Campañas` como si lo fueran. Es la verdad de los datos de hoy; se
+arregla cuando exista la capa canónica de categorías, y entonces este endpoint
+puede crecer con `categoria` y `category_path` sin romper lo que ya consuma la app.
 
 ### Ordenación (`?sort=`)
 
