@@ -1,6 +1,6 @@
 const db = require("../config/db");
 
-function buildWhere({ supermercado, category, ean13, q }) {
+function buildWhere({ supermercado, category, ean13, q, is_offer, is_new }) {
   const clauses = [];
   const params = [];
 
@@ -19,6 +19,15 @@ function buildWhere({ supermercado, category, ean13, q }) {
   if (q) {
     clauses.push("name LIKE ?");
     params.push(`%${q}%`);
+  }
+  // Llegan ya normalizados a 0/1 desde el controller; undefined = sin filtrar.
+  if (is_offer !== undefined) {
+    clauses.push("is_offer = ?");
+    params.push(is_offer);
+  }
+  if (is_new !== undefined) {
+    clauses.push("is_new = ?");
+    params.push(is_new);
   }
 
   return {
@@ -44,11 +53,25 @@ function countBySupermercado() {
     .all();
 }
 
+function findByIds(ids) {
+  if (!ids.length) return [];
+  const placeholders = ids.map(() => "?").join(",");
+  return db.prepare(`SELECT * FROM products WHERE id IN (${placeholders})`).all(...ids);
+}
+
+// Catálogo completo de una cadena, para armar el índice de matching. Sin LIMIT a
+// propósito: el motor necesita ver todos los candidatos.
+function findAllBySupermercado(supermercado) {
+  return db.prepare("SELECT * FROM products WHERE supermercado = ?").all(supermercado);
+}
+
 function insertMany(rows) {
   const stmt = db.prepare(`
     INSERT INTO products
-      (supermercado, ean13, name, brand, price_eur, price_per_unit_eur, measure_unit, image, url, category)
-    VALUES (@supermercado, @ean13, @name, @brand, @price_eur, @price_per_unit_eur, @measure_unit, @image, @url, @category)
+      (supermercado, ean13, name, brand, price_eur, price_per_unit_eur, measure_unit, image, url, category,
+       is_offer, price_before, is_new)
+    VALUES (@supermercado, @ean13, @name, @brand, @price_eur, @price_per_unit_eur, @measure_unit, @image, @url, @category,
+       @is_offer, @price_before, @is_new)
   `);
   const insertAll = db.transaction((items) => {
     for (const item of items) stmt.run(item);
@@ -56,4 +79,10 @@ function insertMany(rows) {
   insertAll(rows);
 }
 
-module.exports = { findAll, countBySupermercado, insertMany };
+module.exports = {
+  findAll,
+  findByIds,
+  findAllBySupermercado,
+  countBySupermercado,
+  insertMany,
+};

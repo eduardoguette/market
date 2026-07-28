@@ -38,6 +38,9 @@ async function main() {
       image: p.image ?? null,
       url: p.url ?? null,
       category: p.category ?? null,
+      is_offer: p.is_offer ? 1 : 0,
+      price_before: p.price_before ?? null,
+      is_new: p.is_new ? 1 : 0,
     });
   }
 
