@@ -56,6 +56,29 @@ db.exec(`
     ON products(supermercado) WHERE is_new = 1;
 `);
 
+// Índices para ordenar por precio. Sin ellos, un `sort=price_asc` sin filtro es
+// un sort en memoria de la tabla entera (medido: 12 ms con 66k filas, y crece
+// lineal). Con el índice sqlite recorre en orden y corta en el LIMIT, sin sort.
+//
+// No hace falta meter `id` en el índice aunque el ORDER BY lo use para desempatar:
+// en sqlite el rowid ya es la última columna implícita de todo índice, y `id` es
+// alias del rowid.
+//
+// Los compuestos con supermercado son para "los más baratos de esta cadena", que
+// es la combinación que más se va a pedir: filtrando por mercadona (13.7k filas)
+// el orden por precio pasa de un sort de 10-28 ms a un recorrido de índice de
+// 0,5 ms, porque el índice ya viene ordenado por precio dentro de cada cadena.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_products_price
+    ON products(price_eur);
+  CREATE INDEX IF NOT EXISTS idx_products_unit_price
+    ON products(price_per_unit_eur);
+  CREATE INDEX IF NOT EXISTS idx_products_super_price
+    ON products(supermercado, price_eur);
+  CREATE INDEX IF NOT EXISTS idx_products_super_unit_price
+    ON products(supermercado, price_per_unit_eur);
+`);
+
 // Índice sobre la expresión del tamaño derivado, para las búsquedas por formato
 // ("agua 50cl"). Sin él, filtrar por tamaño obliga a recorrer la tabla entera
 // porque el valor no está en ninguna columna. Parcial, porque las filas sin

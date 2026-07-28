@@ -4,6 +4,31 @@ const { productSize, normalizeName, unitAliases } = require("../lib/matching");
 
 const FTS_JOIN = "JOIN products_fts ON products_fts.rowid = p.id";
 
+// Criterios de ordenación admitidos. `relevance` no tiene expresión porque
+// depende de si hay búsqueda: con `q` es el bm25 del índice y sin `q` no hay
+// relevancia que medir, así que queda el orden por id.
+//
+// NULLS LAST en todos: sqlite pone los NULL primero por defecto, o sea que "los
+// más baratos" abriría con los productos sin precio. Y no es un caso raro,
+// price_per_unit_eur falta en el 33% de lidl y el 10% de aldi.
+const SORTS = {
+  relevance: null,
+  price_asc: "p.price_eur ASC NULLS LAST",
+  price_desc: "p.price_eur DESC NULLS LAST",
+  unit_price_asc: "p.price_per_unit_eur ASC NULLS LAST",
+  unit_price_desc: "p.price_per_unit_eur DESC NULLS LAST",
+};
+
+// Los precios empatan muchísimo (hay 254 productos a 1,55 €), así que sin un
+// desempate determinista dos páginas seguidas pueden repetir o saltear filas:
+// el orden entre empatados no está definido y sqlite no garantiza reproducirlo
+// entre dos consultas distintas. El id ordena lo que el criterio deja empatado.
+function orderClause(sort, { relevance }) {
+  const expression = sort ? SORTS[sort] : null;
+  if (expression) return `${expression}, p.id`;
+  return relevance ? "bm25(products_fts), p.id" : "p.id";
+}
+
 // Filtros que no son texto. Van con prefijo `p.` porque la búsqueda hace join
 // contra el índice FTS y si no la columna quedaría ambigua.
 function buildWhere({ supermercado, category, ean13, is_offer, is_new }) {
@@ -61,15 +86,16 @@ function resolveMatch(search) {
   return hasMatches(exact) ? exact : ftsExpression(search.tokens, { prefix: true });
 }
 
-function findAll(filters, { limit, offset }) {
+function findAll(filters, { limit, offset, sort }) {
   const base = buildWhere(filters);
   const search = parseSearchQuery(filters.q);
 
   if (!search) {
     const where = base.clauses.length ? `WHERE ${base.clauses.join(" AND ")}` : "";
+    const order = orderClause(sort, { relevance: false });
     const total = db.prepare(`SELECT COUNT(*) AS n FROM products p ${where}`).get(...base.params).n;
     const items = db
-      .prepare(`SELECT p.* FROM products p ${where} ORDER BY p.id LIMIT ? OFFSET ?`)
+      .prepare(`SELECT p.* FROM products p ${where} ORDER BY ${order} LIMIT ? OFFSET ?`)
       .all(...base.params, limit, offset);
     return { total, items };
   }
@@ -77,14 +103,14 @@ function findAll(filters, { limit, offset }) {
   const clauses = [...base.clauses];
   const params = [...base.params];
   let join = "";
-  let order = "p.id";
+  let order = orderClause(sort, { relevance: false });
 
   const match = resolveMatch(search);
   if (match) {
     join = FTS_JOIN;
     clauses.unshift("products_fts MATCH ?");
     params.unshift(match);
-    order = "bm25(products_fts)";
+    order = orderClause(sort, { relevance: true });
   } else if (!search.size) {
     // Una query que no dejó ningún token útil ni cantidad (por ejemplo "de"):
     // se cae al LIKE de antes para no cambiarle la semántica a los casos raros.
@@ -195,6 +221,7 @@ function replaceSupermercado(supermercado, rows) {
 }
 
 module.exports = {
+  SORTS,
   findAll,
   findByIds,
   findAllBySupermercado,

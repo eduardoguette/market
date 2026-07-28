@@ -7,12 +7,38 @@ dependencias externas (nada de Postgres/Supabase).
 
 Auth: header `Authorization: Bearer <MARKET_API_TOKEN>`.
 
-- `GET /products?supermercado=&category=&q=&ean13=&is_offer=&is_new=&limit=&offset=`
+- `GET /products?supermercado=&category=&q=&ean13=&is_offer=&is_new=&sort=&limit=&offset=`
   — `is_offer`/`is_new` aceptan `true|false|1|0|si|no`; cualquier otro valor no filtra.
-  Ver abajo cómo funciona `q`.
+  Ver abajo cómo funcionan `q` y `sort`.
 - `GET /supermercados` — conteo de productos por cadena
 - `POST /comparar-bolsa` — cuánto costaría la misma bolsa en otra cadena
 - `GET /healthz` — sin auth
+
+### Ordenación (`?sort=`)
+
+| valor | orden |
+|---|---|
+| `relevance` | coincidencia con `q` (bm25). Es el default cuando hay `q`. |
+| `price_asc` / `price_desc` | precio absoluto |
+| `unit_price_asc` / `unit_price_desc` | precio por unidad (€/l, €/kg, €/ud) |
+
+Sin `sort` y sin `q` el orden es por `id`. La respuesta devuelve el `sort`
+aplicado. Un valor desconocido da **400** con la lista de válidos, en vez de
+devolver el catálogo en un orden que nadie pidió.
+
+`price_asc` responde "qué es lo más barato de comprar" y `unit_price_asc` "qué
+conviene", que no es lo mismo: la garrafa de aceite de oliva de 5 l es de lo más
+caro del catálogo en absoluto (17,75 €) y de lo más barato por litro (3,55 €/l).
+Para decidir una compra suele importar el segundo.
+
+Los productos sin precio quedan **siempre al final**, en las dos direcciones
+(sqlite por defecto ordena los `NULL` primero, así que "los más baratos" abriría
+con los que no tienen precio). No es un caso raro: a `price_per_unit_eur` le
+falta el dato en ~1/3 de lidl.
+
+Todos los criterios desempatan por `id`, para que paginar sea estable: hay
+cientos de productos con el mismo precio exacto y sin desempate dos páginas
+seguidas podrían repetir o saltear filas.
 
 ### POST /comparar-bolsa
 

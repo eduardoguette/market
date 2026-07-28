@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "ingest": "node src/scripts/ingest.js",
-    "test": "node test/matching.test.js && node test/search.test.js"
+    "test": "node test/matching.test.js && node test/search.test.js && node test/sort.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
