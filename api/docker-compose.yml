@@ -1,0 +1,11 @@
+services:
+  market-api:
+    build: .
+    ports:
+      - "8091:8080"
+    environment:
+      MARKET_API_TOKEN: ${MARKET_API_TOKEN}
+      MARKET_DB_PATH: /app/data/market.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
