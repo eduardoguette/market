@@ -166,10 +166,39 @@ function insertMany(rows) {
   insertAll(rows);
 }
 
+// Reemplaza el catálogo entero de una cadena en una sola transacción.
+// Los scrapers no producen diffs: cada corrida trae el catálogo completo con
+// los precios del día, así que la forma correcta de recargar es borrar lo
+// viejo de esa cadena e insertar lo nuevo. Hacerlo con insertMany a secas
+// duplicaría el catálogo en cada pasada.
+//
+// Atómico a propósito: si algún INSERT falla a mitad, el DELETE se deshace y
+// la cadena queda con sus datos anteriores en lugar de vacía. Los triggers de
+// FTS5 mantienen el índice al día en ambos sentidos.
+function replaceSupermercado(supermercado, rows) {
+  const del = db.prepare("DELETE FROM products WHERE supermercado = ?");
+  const stmt = db.prepare(`
+    INSERT INTO products
+      (supermercado, ean13, name, brand, price_eur, price_per_unit_eur, measure_unit, image, url, category,
+       is_offer, price_before, is_new)
+    VALUES (@supermercado, @ean13, @name, @brand, @price_eur, @price_per_unit_eur, @measure_unit, @image, @url, @category,
+       @is_offer, @price_before, @is_new)
+  `);
+
+  const run = db.transaction((items) => {
+    const deleted = del.run(supermercado).changes;
+    for (const item of items) stmt.run(item);
+    return deleted;
+  });
+
+  return { deleted: run(rows), inserted: rows.length };
+}
+
 module.exports = {
   findAll,
   findByIds,
   findAllBySupermercado,
   countBySupermercado,
   insertMany,
+  replaceSupermercado,
 };
