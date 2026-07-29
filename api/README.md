@@ -15,12 +15,57 @@ Auth: header `Authorization: Bearer <MARKET_API_TOKEN>`.
   ofrecer un filtro de novedades en una cadena que no trae ninguna.
 - `GET /products/:id` — un producto por id (404 si no existe). Hace falta para que
   un enlace directo a un producto funcione sin haber pasado por el listado.
-- `GET /pasillos?supermercado=&min_total=&limit=&is_offer=&is_new=` — los pasillos
-  de una cadena
+- `GET /categorias?supermercado=&is_offer=&is_new=` — los cajones canónicos, comunes
+  a las nueve cadenas
+- `GET /pasillos?supermercado=&categoria_canonica=&min_total=&limit=&is_offer=&is_new=`
+  — los pasillos, filtrables por cajón
 - `GET /unidades?supermercado=&is_offer=&is_new=` — las unidades del catálogo con su
   conteo, para poder ofrecer el filtro `measure_unit` sin adivinarlas
 - `POST /comparar-bolsa` — cuánto costaría la misma bolsa en otra cadena
 - `GET /healthz` — sin auth
+
+### Taxonomía canónica
+
+Las 1.371 categorías del catálogo están capturadas a niveles y con calidades
+distintas: alcampo da raíces gruesas (`Alimentación`, 3.332 productos), mercadona
+hojas descriptivas, bm hojas que no se describen solas (`Seco`, `Envasado`, `Al
+corte`) y ahorramás mezcla pasillos con campañas (`Black Friday`, `Día del Padre`,
+`Mondelez`). Comparar `Alimentación` con `Sazonadores` es un error de categoría.
+
+`src/lib/categories.js` traduce todo eso a **24 cajones canónicos** en tres pasadas
+—ruta por prefijo más largo, etiqueta exacta, palabra clave sobre la etiqueta— y con
+tres salidas: un cajón, `FUERA_DE_ALCANCE`, o `NO_FIABLE` (la etiqueta miente y hay
+que mirar el nombre). Lo que no resuelve ninguna pasada queda **sin cajón**, que es
+honesto y visible.
+
+```
+GET /categorias
+{ "categorias": [ { "id": "lacteos_huevos", "nombre": "Lácteos y huevos",
+                    "alimentacion": true, "total": 2383, "supermercados": 6 } ],
+  "sin_clasificar": 8860 }
+```
+
+El orden es el del mapa (el de los pasillos de un supermercado real), no alfabético
+ni por volumen. `alimentacion` separa comida de lo que se compra en el súper sin
+serlo, para que la UI agrupe sin saber de taxonomías.
+
+El flujo que habilita es el que pidió el usuario: **categoría → pasillo de cada
+cadena → productos**.
+
+```
+GET /categorias                                        -> los 24 cajones
+GET /pasillos?categoria_canonica=lacteos_huevos        -> los pasillos de ese cajón, por cadena
+GET /products?categoria_canonica=lacteos_huevos&...    -> los productos
+```
+
+Cobertura medida sobre las 54.646 filas: **83,8% con cajón**, 10,6% con etiqueta no
+fiable, 5,2% sin resolver (342 categorías, la mayor con 53 productos). Las que no se
+resuelven son en su mayoría hojas de bm que no se describen solas y **necesitan que
+el scraper emita `category_path`**.
+
+`npm run recategorize` reasigna el catálogo con el mapa actual y lista lo no resuelto
+por volumen: el mapa vive en código, así que cambiar de opinión es una pasada de
+UPDATE y no un re-scrape.
 
 ### GET /pasillos
 

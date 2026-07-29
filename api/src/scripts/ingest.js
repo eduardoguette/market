@@ -11,6 +11,7 @@
 const fs = require("fs");
 const readline = require("readline");
 const productModel = require("../models/product.model");
+const categorias = require("../lib/categories");
 
 function parseArgs() {
   const args = {};
@@ -32,6 +33,22 @@ function text(value) {
 
 function num(value) {
   return value === null || value === undefined ? null : value;
+}
+
+// Los scrapers emiten `category_path` como array de raíz a hoja. Array y no string
+// con separador porque los nombres de categoría de lidl llevan "/" dentro.
+function derivaCategoria(p) {
+  const path = Array.isArray(p.category_path) ? p.category_path : null;
+  const producto = { supermercado: p.supermercado, category: p.category, category_path: path };
+  const { canonical, aisle, source } = categorias.resolve(producto);
+  return {
+    category_path: categorias.pathToString(path),
+    aisle: aisle || null,
+    // Sólo se guarda el cajón cuando es uno de verdad: FUERA_DE_ALCANCE y
+    // NO_FIABLE son estados intermedios de la resolución, no categorías.
+    canonical_category: categorias.esCanonica(canonical) ? canonical : null,
+    category_source: categorias.esCanonica(canonical) ? source : null,
+  };
 }
 
 async function main() {
@@ -70,6 +87,7 @@ async function main() {
       image: text(p.image),
       url: text(p.url),
       category: text(p.category),
+      ...derivaCategoria(p),
       is_offer: p.is_offer ? 1 : 0,
       price_before: num(p.price_before),
       is_new: p.is_new ? 1 : 0,

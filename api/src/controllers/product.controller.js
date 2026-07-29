@@ -34,6 +34,8 @@ function list(req, res) {
       ean13,
       q,
       measure_unit: req.query.measure_unit,
+      categoria_canonica: req.query.categoria_canonica,
+      pasillo: req.query.pasillo,
       is_offer: parseBoolFlag(req.query.is_offer),
       is_new: parseBoolFlag(req.query.is_new),
     },
@@ -56,6 +58,18 @@ function detail(req, res) {
   if (!product) return res.status(404).json({ error: "producto no encontrado" });
 
   res.json(product);
+}
+
+// Los cajones canónicos: el primer paso del flujo que pidió el usuario, elegir
+// categoría antes de elegir pasillo.
+function categorias(req, res) {
+  res.json(
+    productModel.countByCanonical({
+      supermercado: req.query.supermercado,
+      is_offer: parseBoolFlag(req.query.is_offer),
+      is_new: parseBoolFlag(req.query.is_new),
+    })
+  );
 }
 
 // Las unidades del catálogo con su conteo, para que la app pueda ofrecer el filtro
@@ -92,6 +106,7 @@ function pasillos(req, res) {
   const { total, pasillos: lista } = productModel.countByAisle(
     {
       supermercado: req.query.supermercado,
+      categoria_canonica: req.query.categoria_canonica,
       is_offer: parseBoolFlag(req.query.is_offer),
       is_new: parseBoolFlag(req.query.is_new),
     },
@@ -102,4 +117,4 @@ function pasillos(req, res) {
   res.json({ total, limit: limit || null, min_total: minTotal, pasillos: lista });
 }
 
-module.exports = { list, detail, unidades, supermercados, pasillos, parseBoolFlag };
+module.exports = { list, detail, categorias, unidades, supermercados, pasillos, parseBoolFlag };

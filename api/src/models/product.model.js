@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const { parseSearchQuery, ftsExpression, sizeBand } = require("../lib/search");
 const { productSize, normalizeName, unitAliases } = require("../lib/matching");
+const { CANONICAS, canonicaPorId } = require("../lib/categories");
 
 const FTS_JOIN = "JOIN products_fts ON products_fts.rowid = p.id";
 
@@ -31,7 +32,10 @@ function orderClause(sort, { relevance }) {
 
 // Filtros que no son texto. Van con prefijo `p.` porque la búsqueda hace join
 // contra el índice FTS y si no la columna quedaría ambigua.
-function buildWhere({ supermercado, category, ean13, measure_unit, is_offer, is_new }) {
+function buildWhere({
+  supermercado, category, ean13, measure_unit,
+  categoria_canonica, pasillo, is_offer, is_new,
+}) {
   const clauses = [];
   const params = [];
 
@@ -52,6 +56,14 @@ function buildWhere({ supermercado, category, ean13, measure_unit, is_offer, is_
   if (measure_unit) {
     clauses.push("p.measure_unit = ?");
     params.push(measure_unit);
+  }
+  if (categoria_canonica) {
+    clauses.push("p.canonical_category = ?");
+    params.push(categoria_canonica);
+  }
+  if (pasillo) {
+    clauses.push("p.aisle = ?");
+    params.push(pasillo);
   }
   // Llegan ya normalizados a 0/1 desde el controller; undefined = sin filtrar.
   if (is_offer !== undefined) {
@@ -239,16 +251,69 @@ function findAllBySupermercado(supermercado) {
   return db.prepare("SELECT * FROM products WHERE supermercado = ?").all(supermercado);
 }
 
+// Las columnas de la taxonomía son opcionales para quien llama: un scraper que
+// todavía no emite `category_path` sigue funcionando y sus filas quedan sin cajón,
+// que es la degradación que toca.
+const COLUMNAS_OPCIONALES = {
+  category_path: null,
+  aisle: null,
+  canonical_category: null,
+  category_source: null,
+};
+
+function conDefaults(row) {
+  return { ...COLUMNAS_OPCIONALES, ...row };
+}
+
+// Los cajones canónicos con su conteo. Se cruzan con la lista del mapa para
+// devolver también el nombre y si es alimentación, que es lo que la UI necesita
+// para pintar la pantalla sin saber de taxonomías.
+function countByCanonical(filters = {}) {
+  const { clauses, params } = buildWhere(filters);
+  clauses.push("p.canonical_category IS NOT NULL");
+  const filas = db
+    .prepare(
+      `SELECT p.canonical_category AS id, COUNT(*) AS total,
+              COUNT(DISTINCT p.supermercado) AS supermercados
+         FROM products p WHERE ${clauses.join(" AND ")}
+        GROUP BY p.canonical_category`
+    )
+    .all(...params);
+
+  const porId = new Map(filas.map((f) => [f.id, f]));
+  // Se recorre CANONICAS y no las filas para que el orden sea el del mapa, que es
+  // el del pasillo de un supermercado real y no alfabético ni por volumen.
+  const categorias = CANONICAS.filter((c) => porId.has(c.id)).map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    alimentacion: c.alimentacion,
+    total: porId.get(c.id).total,
+    supermercados: porId.get(c.id).supermercados,
+  }));
+
+  const where = clauses.slice(0, -1);
+  const sinCajon = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM products p
+        ${where.length ? `WHERE ${where.join(" AND ")} AND` : "WHERE"} p.canonical_category IS NULL`
+    )
+    .get(...params).n;
+
+  return { categorias, sin_clasificar: sinCajon };
+}
+
 function insertMany(rows) {
   const stmt = db.prepare(`
     INSERT INTO products
       (supermercado, ean13, name, brand, price_eur, price_per_unit_eur, measure_unit, image, url, category,
+       category_path, aisle, canonical_category, category_source,
        is_offer, price_before, is_new)
     VALUES (@supermercado, @ean13, @name, @brand, @price_eur, @price_per_unit_eur, @measure_unit, @image, @url, @category,
+       @category_path, @aisle, @canonical_category, @category_source,
        @is_offer, @price_before, @is_new)
   `);
   const insertAll = db.transaction((items) => {
-    for (const item of items) stmt.run(item);
+    for (const item of items) stmt.run(conDefaults(item));
   });
   insertAll(rows);
 }
@@ -267,14 +332,16 @@ function replaceSupermercado(supermercado, rows) {
   const stmt = db.prepare(`
     INSERT INTO products
       (supermercado, ean13, name, brand, price_eur, price_per_unit_eur, measure_unit, image, url, category,
+       category_path, aisle, canonical_category, category_source,
        is_offer, price_before, is_new)
     VALUES (@supermercado, @ean13, @name, @brand, @price_eur, @price_per_unit_eur, @measure_unit, @image, @url, @category,
+       @category_path, @aisle, @canonical_category, @category_source,
        @is_offer, @price_before, @is_new)
   `);
 
   const run = db.transaction((items) => {
     const deleted = del.run(supermercado).changes;
-    for (const item of items) stmt.run(item);
+    for (const item of items) stmt.run(conDefaults(item));
     return deleted;
   });
 
@@ -286,6 +353,7 @@ module.exports = {
   findAll,
   countByAisle,
   countByMeasureUnit,
+  countByCanonical,
   findById,
   findByIds,
   findAllBySupermercado,
