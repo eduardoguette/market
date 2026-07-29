@@ -569,6 +569,98 @@ test("las protecciones laxas se ajustaron para no rescatar bazar", () => {
   }
 });
 
+test("el sufijo \\w* de la comida no captura derivaciones de utensilio", () => {
+  // "sandwich\\w*" cogía sandwichera, y por lo mismo "sopa" cogía sopera y "tarta"
+  // tartera. Eran 6 de los 34 rescates malos y todos por la misma causa.
+  for (const [category, name] of [
+    ["Electrodomésticos", "Sandwichera QILIVE 850W"],
+    ["Electrodomésticos", "Sandwichera TAURUS 900W"],
+    ["Menaje", "Sopera de porcelana blanca 2l"],
+    ["Menaje", "Tartera de aluminio con tapa 26cm"],
+  ]) {
+    assert.notStrictEqual(
+      scope.decide({ supermercado: "alcampo", category, name }).via,
+      "proteccion",
+      `"${name}" se salvó por una protección de comida`
+    );
+  }
+  // Y el plural de verdad sigue protegido.
+  for (const name of ["Sandwich mixto de jamón y queso", "Sandwiches vegetales 2 uds", "Sopa de pollo con fideos", "Tarta de queso individual"]) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "alcampo", category: "Bricolaje", name }).decision,
+      scope.MANTENER,
+      `"${name}" se borró`
+    );
+  }
+});
+
+test("las palabras que cambian de oficio en bazar son contextuales", () => {
+  // Tinte de pelo y quitaesmalte son cuidado personal, pero en Bricolaje son tinte
+  // de madera y disolvente. Es la polisemia otra vez, en palabras que había
+  // clasificado como fuertes.
+  const casos = [
+    ["Bricolaje", "Tinte al agua negro CPP, 50ml"],
+    ["Bricolaje", "Acetona At-28 DIPISTOL, 1L"],
+    ["Juguetes", "Caja De Maquillaje ONE TWO FUN"],
+    ["Juguetes", "Juego de mesa Sushi & Go! DEVIR"],
+    ["Jardín y terraza", "Parrilla para salchichas de acero"],
+    ["Juguetes", "Perro salchicha 60cm CREACIONES LLOPIS"],
+    ["Jardín y terraza", "Semillas de césped 1kg"],
+    ["Bricolaje", "Set de 4 brochetas cromadas IBERLUS"],
+    ["Electrodomésticos", "Irrigador oral WATERPIK"],
+    ["Electrodomésticos", "Placa de gas FAGOR, quemador WOK"],
+    ["Bricolaje", "Universal marco para microondas"],
+  ];
+  for (const [category, name] of casos) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "alcampo", category, name }).decision,
+      scope.DESCARTAR,
+      `"${name}" se rescató`
+    );
+  }
+  // Nombrando el sentido de supermercado, sigue fuerte.
+  for (const [category, name] of [
+    ["Bricolaje", "Tinte de pelo permanente castaño"],
+    ["Bricolaje", "Quitaesmalte con acetona 100ml"],
+    ["Juguetes", "Base de maquillaje fluida tono claro"],
+    ["Bricolaje", "Puré de patata deshidratado 200g"],
+  ]) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "alcampo", category, name }).decision,
+      scope.MANTENER,
+      `"${name}" se borró`
+    );
+  }
+});
+
+test("un plato de maceta y una bandeja de oficina no son vajilla desechable", () => {
+  // El guard va sobre el nombre entero: estas palabras aparecen ANTES del material,
+  // donde un lookahead al final del patrón no las ve.
+  for (const [category, name] of [
+    ["Jardín y terraza", "Plato circular de plástico color terracota 20cm"],
+    ["Jardín y terraza", "Plato de maceta de plástico 25cm"],
+    ["Papelería", "Bandeja sobremesa apilable formato A4, plástico reciclado"],
+  ]) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "alcampo", category, name }).decision,
+      scope.DESCARTAR,
+      `"${name}" se rescató como vajilla`
+    );
+  }
+  // Y la vajilla desechable de verdad sigue entrando.
+  for (const [category, name] of [
+    ["Papelería", "Platos desechables de cartón 23cm 10 uds"],
+    ["Textil", "Vaso 23cl cartón 10unds"],
+    ["Papelería", "Bandeja de cartón rectangular para alimentos"],
+  ]) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "alcampo", category, name }).decision,
+      scope.MANTENER,
+      `"${name}" se borró`
+    );
+  }
+});
+
 test("mascotas y limpieza NO están en la lista negra de categorías", () => {
   // Se incluyen en el alcance a propósito: el usuario las quiere dentro.
   assert.ok(!scope.categoriaFueraDeAlcance("alcampo", "Mascotas"));

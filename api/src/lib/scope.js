@@ -54,6 +54,12 @@ const DUDOSO = "dudoso";
 // La prueba para clasificar cada una: ¿existe un producto con esta palabra en
 // Bricolaje, Automóvil o Jardín que NO sea de supermercado? Si existe, es
 // contextual.
+// Contextos que descalifican la regla de vajilla desechable: un plato de maceta y
+// una bandeja de oficina son de plástico pero no son vajilla. Va como guard sobre
+// el nombre entero porque estas palabras aparecen antes del material en el nombre,
+// donde un lookahead al final del patrón no las ve.
+const NO_ES_VAJILLA = /\b(maceta|macetero|terracota|jardinera|sobremesa|apilable|archivador|oficina|formato a4)\b/;
+
 const FUERTE = "fuerte";
 const CONTEXTUAL = "contextual";
 
@@ -78,7 +84,8 @@ const PROTECCIONES = [
   [/\baceite de (oliva|girasol|coco|semillas|colza|palma|orujo)\b/, FUERTE],
   [/\baceite (virgen|refinado|de sabor)\b/, FUERTE],
   [/\b(goma de mascar|chicle)/, FUERTE],
-  [/\bsemillas? de \w+/, FUERTE],
+  // Semillas de césped y de rúcula son de jardín; las de chía, comida.
+  [/\bsemillas? de \w+/, CONTEXTUAL],
   [/\bcopa de (helado|postre)\b/, FUERTE],
   [/\bplatos? (preparado|combinado)/, FUERTE],
   [/\bvasito/, FUERTE],
@@ -90,12 +97,21 @@ const PROTECCIONES = [
   // "bandeja de croquetas", "palomitas para microondas"), así que necesita
   // protección propia. "taco" y "pincho" van acotados: un taco de lija y un
   // pincho de jardín no son comida.
-  [/\b(tortilla|hamburguesa|croqueta|ensaladilla|pizza|canelon|lasaña|lasana|empanad|rebozad|precocinad|albondiga|nugget|flamenquin|san jacobo|paella|fideua|risotto|salchicha|escalope|brocheta|gazpacho|salmorejo|sopa|pure|guiso|estofado|cocido|fabada|callos|migas|salteado|wok|burrito|falafel|hummus|sushi|tortellini|ravioli|noqui|ñoqui|arancini|samosa|quiche|tarta|bocadillo|sandwich|wrap|kebab|pollo asado|asado)\w*/, FUERTE],
+  // Prefijos truncados: necesitan \w* para coger todas las terminaciones.
+  [/\b(croquet|empanad|rebozad|precocinad|canelon|lasan|lasaña|albondig|tortell|ravioli|ensaladill)\w*/, FUERTE],
+  // Palabras completas: sólo plural, nunca derivación. Con \w* "sandwich" cogía
+  // sandwichera, "sopa" sopera y "tarta" tartera, todos utensilios.
+  [/\b(tortilla|hamburguesa|pizza|nugget|flamenquin|san jacobo|paella|fideua|risotto|escalope|gazpacho|salmorejo|sopa|guiso|estofado|cocido|fabada|callos|migas|salteado|burrito|falafel|hummus|noqui|ñoqui|arancini|samosa|quiche|tarta|tartaleta|bocadillo|sandwich|wrap|kebab|pollo asado)(s|es)?\b/, FUERTE],
+  [/\bpures? de \w+/, FUERTE],
+  // Contextuales: en una categoría de bazar son otra cosa. "Juego de mesa Sushi &
+  // Go", "Parrilla para salchichas", "Perro salchicha" (un peluche), "Set de
+  // brochetas cromadas".
+  [/\b(sushi|salchicha|brocheta)\w*/, CONTEXTUAL],
   [/\btacos? de (maiz|jamon|queso|pollo|carne|atun|pavo|lomo)\b/, FUERTE],
   [/\bpinchos? (de|moruno)\b/, FUERTE],
   [/\b(a la (plancha|sarten|parrilla|brasa|barbacoa|romana)|al horno|al vapor|frito|asad[oa])\b/, FUERTE],
   [/\bpalomitas\b/, FUERTE],
-  [/\bpara (cafetera|microondas|freidora|sandwichera)\b/, FUERTE],
+  [/\bpara (cafetera|freidora)\b/, FUERTE],
 
   // --- Vajilla desechable y velas: fuerte ----------------------------------
   // Decisión explícita del usuario. Va como protección fuerte porque tiene que
@@ -105,8 +121,8 @@ const PROTECCIONES = [
   // "reutilizable" queda fuera a propósito: un vaso de plástico reutilizable es
   // menaje, y así lo deciden las reglas de más abajo.
   [/\b(desechable|un solo uso|un uso|monouso|usar y tirar)\w*(?![^]*reutilizab)/, FUERTE],
-  [/\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|palillo|palillos|envase|envases|tarrina|tarrinas)\b[^]*\b(carton|papel|plastico|poliestireno|celulosa|caña de azucar|cana de azucar)\b/, FUERTE],
-  [/\b(carton|papel|plastico|poliestireno|caña de azucar|cana de azucar)\b[^]*\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|envase|envases|tarrina|tarrinas)\b/, FUERTE],
+  [/\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|palillo|palillos|envase|envases|tarrina|tarrinas)\b[^]*\b(carton|papel|plastico|poliestireno|celulosa|caña de azucar|cana de azucar)\b/, FUERTE, true],
+  [/\b(carton|papel|plastico|poliestireno|caña de azucar|cana de azucar)\b[^]*\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|envase|envases|tarrina|tarrinas)\b/, FUERTE, true],
 
   // Las velas entran: mercadona tiene su propia categoría "Velas y decoración",
   // así que sacarlas de alcampo sería incoherente entre cadenas. Con sinónimos,
@@ -147,23 +163,31 @@ const PROTECCIONES = [
   [/(?<!color )(?<!tono )\bcremas?\b/, CONTEXTUAL],
   [/\b(serum|locion|exfoliante|tonico|contorno de ojos|protector solar|aftersun|fluido)\b/, CONTEXTUAL],
   [/\bmascarilla (capilar|facial|hidratante|de arcilla)\b/, FUERTE],
-  [/\b(maquillaje|rimel|mascara de pestañas|pintalabios|barra de labios|laca de uñas|colorete|sombra de ojos|delineador)\b/, FUERTE],
+  [/\b(base de maquillaje|rimel|mascara de pestañas|pintalabios|barra de labios|laca de uñas|colorete|sombra de ojos|delineador)\b/, FUERTE],
+  // "Caja de maquillaje ONE TWO FUN" es un juguete.
+  [/\bmaquillaje\b/, CONTEXTUAL],
   [/\besmalte de uñas\b|\besmalte permanente\b/, FUERTE],
   [/\b(corrector de ojeras|corrector fluido|corrector de maquillaje)\b/, FUERTE],
   [/\b(compresa|tampon|salvaslip|copa menstrual|protegeslip|higiene intima)\w*/, FUERTE],
   [/\b(pañal|panal|toallita|bastoncillo|discos? desmaquillante)\w*/, FUERTE],
   [/\bgasas\b|\bgasa (esteril|hidrofil)/, FUERTE],
   [/\balgodon (hidrofilo|magico)\b|\bdiscos? de algodon\b/, FUERTE],
-  [/\b(cepillo de dientes|cepillo dental|seda dental|hilo dental|cinta dental|irrigador|colutorio)\b/, FUERTE],
+  [/\b(cepillo de dientes|cepillo dental|seda dental|hilo dental|cinta dental|colutorio)\b/, FUERTE],
+  [/\birrigador\b/, CONTEXTUAL],
   [/\bbrocha (de maquillaje|para polvos)\b/, FUERTE],
   [/\bmolde de papel\b/, FUERTE],
   [/\b(cuchillas?|maquinilla) de afeitar\b/, FUERTE],
   [/\b(preservativo|lubricante intimo|test de embarazo|suero fisiologico|alcohol sanitario|agua oxigenada|tirita|venda|esparadrapo)\w*/, FUERTE],
   [/\b(ibuprofeno|paracetamol|aspirina|jarabe|vitamina|complemento alimenticio|suplemento|probiotico)\b/, FUERTE],
-  [/\b(tinte|coloracion|decolorante|champu|mascarilla capilar)\b/, FUERTE],
+  [/\btintes? (de |para )?(pelo|cabello|capilar|permanente)\b/, FUERTE],
+  [/\b(coloracion|decolorante|champu|mascarilla capilar)\b/, FUERTE],
+  // "Tinte al agua" es tinte de madera; en bazar nunca es de pelo.
+  [/\btintes?\b/, CONTEXTUAL],
   [/\bmascarilla (ffp2|quirurgica|higienica)\b/, FUERTE],
   [/\blima (de uñas|fibra)\b/, FUERTE],
-  [/\b(quitaesmalte|acetona)\b/, FUERTE],
+  [/\bquitaesmalte\b/, FUERTE],
+  // La acetona de Bricolaje es disolvente.
+  [/\bacetona\b/, CONTEXTUAL],
 
   // --- Bebé consumible y mascotas: fuerte ---------------------------------
   [/\b(potito|papilla|leche infantil|cereales infantiles|tarrito)\w*/, FUERTE],
@@ -446,7 +470,9 @@ function classify(product) {
       };
     }
   }
-  for (const [re, nivel] of PROTECCIONES) {
+  const noEsVajilla = NO_ES_VAJILLA.test(normalized);
+  for (const [re, nivel, esVajilla] of PROTECCIONES) {
+    if (esVajilla && noEsVajilla) continue;
     const hit = normalized.match(re);
     if (hit) {
       return { decision: MANTENER, motivo: `protegido: "${hit[0].trim()}"`, familia: null, nivel };
