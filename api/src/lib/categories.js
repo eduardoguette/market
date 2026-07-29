@@ -222,6 +222,15 @@ const POR_PALABRA = [
   [/chocolate|bombon|caramelo|gominola|golosina|regaliz|chicle|turron|chocolatina|dulce|azucar|miel|mermelada|crema de cacao|snack dulce/i, "dulces_chocolate"],
   [/leche|yogur|yogurt|kefir|nata|mantequilla|margarina|huevo|lacte|cuajada|natilla|flan|postre lacteo|batido lacteo|quark/i, "lacteos_huevos"],
 
+  // Los frutos secos van ANTES que la fruta por el mismo motivo que el chocolate va
+  // antes que la leche: lo distintivo manda sobre lo genérico. La regla de snacks ya
+  // contempla "fruto seco", pero nunca llegaba a ejecutarse, porque el `fruta` de
+  // aquí abajo se lleva por delante "Frutos secos y fruta desecada" (mercadona, 65
+  // productos: almendra, nuez, pistacho, cacahuete, pipas, palomitas). Eran 65
+  // aperitivos escondidos en frutas y verduras, y además le daban al cajón una
+  // tercera fila con "fruta" en el nombre que no se podía distinguir de las otras dos.
+  [/frutos? secos?/i, "snacks"],
+
   [/fruta|verdura|hortaliza|ensalada|lechuga|tomate|patata|cebolla|pimiento|zanahoria|platano|manzana|naranja|aguacate|champinon|seta|fruteria|verduleria|^frescos$|fresco de|granja/i, "frutas_verduras"],
 
   [/pan\b|panaderia|bolleria|bizcocho|magdalena|croissant|donut|pasteleria|reposteria|tarta|coca|bolleria|barrita|tostad|biscote|molde|picos|rosquillet|picatoste|colines/i, "panaderia_bolleria"],

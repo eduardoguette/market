@@ -10,6 +10,7 @@ const DB_PATH = path.join(os.tmpdir(), `market_pasillos_test_${process.pid}.db`)
 fs.rmSync(DB_PATH, { force: true });
 process.env.MARKET_DB_PATH = DB_PATH;
 
+const categorias = require("../src/lib/categories");
 const productModel = require("../src/models/product.model");
 const productController = require("../src/controllers/product.controller");
 
@@ -53,7 +54,15 @@ add("carrefour", "Bebidas", 4);
 add("aldi", null, 3); // sin categoría: no son un pasillo
 add("aldi", "Limpieza y hogar", 2);
 
-productModel.insertMany(FIXTURES);
+// Pasando por `columnsFor()`, igual que el ingest y que los fixtures de más abajo.
+// Insertados en crudo quedaban con `aisle` y `canonical_category` a NULL, así que
+// eran filas con una forma que en producción no existe: los tests de este archivo
+// sólo pasaban porque `countByAisle` agrupa por `category`, y cualquier prueba que
+// filtrara por `pasillo=` (que va contra `p.aisle`) o por `categoria_canonica=`
+// habría dado cero sin que el fixture tuviera nada que ver con lo que se probaba.
+productModel.insertMany(
+  FIXTURES.map((row) => ({ ...row, ...categorias.columnsFor(row) }))
+);
 
 const pasillos = (filters, opts) => productModel.countByAisle(filters, opts).pasillos;
 const contar = (filters, opts) => productModel.countByAisle(filters, opts).total;
@@ -268,7 +277,6 @@ test("supermercados acepta los flags por HTTP", () => {
 // motivo equivocado. Derivar las columnas a mano acá es exactamente el bug que
 // ya se pagó una vez -- los fixtures tienen que salir de la misma función que
 // usa el ingest.
-const categorias = require("../src/lib/categories");
 
 const crudos = [
   { supermercado: "dia", category: "Frutas", veces: 4 },

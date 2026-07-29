@@ -74,6 +74,26 @@ test("lo distintivo gana a lo genérico", () => {
   assert.strictEqual(resolver("mercadona", "Leche y bebidas vegetales").canonical, "lacteos_huevos");
 });
 
+test("los frutos secos son aperitivo, no fruta", () => {
+  // Mismo caso que "Chocolate con leche": el `fruta` de la regla de frutas y
+  // verduras se llevaba por delante "Frutos secos y fruta desecada" antes de que
+  // la regla de snacks (que ya dice "fruto seco") pudiera ejecutarse. Eran 65
+  // productos de mercadona -- almendra, nuez, pistacho, cacahuete, pipas,
+  // palomitas -- dentro del cajón de frutas y verduras.
+  assert.strictEqual(
+    resolver("mercadona", "Frutos secos y fruta desecada").canonical,
+    "snacks"
+  );
+  assert.strictEqual(resolver("bm", "Frutos secos").canonical, "snacks");
+  assert.strictEqual(resolver("ahorramas", "Otros frutos secos").canonical, "snacks");
+
+  // Y la fruta de verdad no se mueve: la regla nueva es específica, no un cambio
+  // de precedencia general entre snacks y frutas.
+  assert.strictEqual(resolver("dia", "Frutas").canonical, "frutas_verduras");
+  assert.strictEqual(resolver("mercadona", "Fruta y verdura").canonical, "frutas_verduras");
+  assert.strictEqual(resolver("bm", "Champiñones").canonical, "frutas_verduras");
+});
+
 // --- las tres salidas -----------------------------------------------------
 
 test("las campañas comerciales no son un pasillo", () => {
