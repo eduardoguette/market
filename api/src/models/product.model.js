@@ -30,6 +30,29 @@ function orderClause(sort, { relevance }) {
   return relevance ? "bm25(products_fts), p.id" : "p.id";
 }
 
+// `category` admite varios valores. Hace falta porque la app agrupa en una sola
+// fila los nombres de pasillo que sólo se diferencian en acentos/mayúsculas o en
+// singular/plural ("Fruta" y "Frutas" son el mismo pasillo escrito por dos
+// cadenas distintas), y esa fila tiene que poder pedir sus productos en UNA
+// llamada. Sin esto, fusionar filas en la app produce filas que no se pueden
+// abrir.
+//
+// La forma es repetir el parámetro (`?category=Fruta&category=Frutas`), que es
+// lo que express entrega como array. NO se acepta una lista separada por comas:
+// 104 de los 1.223 nombres de pasillo del catálogo llevan una coma dentro
+// ("Aceites, salsas y especias", "Leche, Huevos, Lácteos, Yogures y Bebidas
+// vegetales"), así que la coma no distingue "dos pasillos" de "un pasillo cuyo
+// nombre tiene coma" y partir por ella rompería justo esos 104.
+//
+// Antes de este cambio, repetir el parámetro no era "no soportado" sino un 500:
+// el array llegaba entero como un único parámetro de sqlite y better-sqlite3
+// tiraba `RangeError: Too many parameter values were provided`. Reproducido en
+// producción con `?category=Fruta&category=Frutas`.
+function listaDeValores(valor) {
+  const bruto = Array.isArray(valor) ? valor : [valor];
+  return bruto.map((v) => String(v ?? "").trim()).filter(Boolean);
+}
+
 // Filtros que no son texto. Van con prefijo `p.` porque la búsqueda hace join
 // contra el índice FTS y si no la columna quedaría ambigua.
 function buildWhere({
@@ -43,9 +66,16 @@ function buildWhere({
     clauses.push("p.supermercado = ?");
     params.push(supermercado);
   }
-  if (category) {
+  // Un solo valor sigue generando el `= ?` de siempre; varios, un IN. Se
+  // distinguen a propósito en vez de usar IN para todo: el caso de un valor es
+  // el 99% del tráfico y el plan de sqlite queda idéntico al de antes.
+  const categories = listaDeValores(category);
+  if (categories.length === 1) {
     clauses.push("p.category = ?");
-    params.push(category);
+    params.push(categories[0]);
+  } else if (categories.length > 1) {
+    clauses.push(`p.category IN (${categories.map(() => "?").join(",")})`);
+    params.push(...categories);
   }
   if (ean13) {
     clauses.push("p.ean13 = ?");

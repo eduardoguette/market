@@ -251,6 +251,114 @@ test("supermercados acepta los flags por HTTP", () => {
   assert.strictEqual(llamar(productController.supermercados, {}).body.length, 4);
 });
 
+// --- varios `category` en una sola llamada --------------------------------
+//
+// El caso real: la app pinta UNA fila por pasillo agrupando los nombres que sólo
+// se diferencian en acentos/mayúsculas o en singular/plural, porque las cadenas
+// escriben el mismo pasillo distinto ("Frutas" en dia y aldi, "Fruta" en
+// mercadona: 143 productos en tres filas repetidas). Esa fila agrupada tiene que
+// poder abrirse, y para eso `?category=` tiene que aceptar los dos nombres.
+//
+// Estas filas se insertan al final a propósito: los tests de arriba ya corrieron
+// (test() ejecuta en el momento) y varios cuentan sobre FIXTURES.length.
+//
+// Y se insertan pasando por `columnsFor()`, no a mano: la app pide el pasillo
+// junto con `categoria_canonica`, así que un fixture sin `canonical_category`
+// haría que el filtro canónico no encontrara nada y el test pasaría por el
+// motivo equivocado. Derivar las columnas a mano acá es exactamente el bug que
+// ya se pagó una vez -- los fixtures tienen que salir de la misma función que
+// usa el ingest.
+const categorias = require("../src/lib/categories");
+
+const crudos = [
+  { supermercado: "dia", category: "Frutas", veces: 4 },
+  { supermercado: "mercadona", category: "Fruta", veces: 3 },
+  // Otro pasillo del MISMO cajón: así el cajón es más grande que la fila y se
+  // puede comprobar que pedir los dos nombres acota de verdad en vez de traer
+  // el cajón entero. Las FIXTURES de arriba no sirven para esto porque se
+  // insertaron sin pasar por columnsFor y quedaron sin `canonical_category`.
+  { supermercado: "dia", category: "Verduras", veces: 2 },
+  // Control: otro cajón, para comprobar que el IN no se lleva de más.
+  { supermercado: "dia", category: "Carnes", veces: 2 },
+];
+
+const NUEVOS = [];
+for (const { supermercado, category, veces } of crudos) {
+  for (let i = 0; i < veces; i++) {
+    const base = {
+      supermercado, category,
+      name: `Fruta ${NUEVOS.length + 1}`,
+      price_eur: 2, price_per_unit_eur: 2, measure_unit: "kg",
+      ean13: null, brand: null, image: null, url: null,
+      is_offer: 0, price_before: null, is_new: 0,
+    };
+    NUEVOS.push({ ...base, ...categorias.columnsFor(base) });
+  }
+}
+productModel.insertMany(NUEVOS);
+
+const buscar = (filtros) => productModel.findAll(filtros, { limit: 50, offset: 0 });
+
+test("los fixtures nuevos caen en el cajón canónico por columnsFor, no a mano", () => {
+  // Si esto falla, los tests de abajo estarían midiendo otra cosa.
+  const items = buscar({ category: "Fruta" }).items;
+  assert.strictEqual(items.length, 3);
+  assert.ok(items.every((p) => p.canonical_category === "frutas_verduras"));
+});
+
+test("un solo category sigue funcionando igual que antes", () => {
+  assert.strictEqual(buscar({ category: "Frutas" }).total, 4);
+  assert.strictEqual(buscar({ category: "Fruta" }).total, 3);
+});
+
+test("category repetido suma los dos nombres en una sola llamada", () => {
+  // Antes esto era un 500: `RangeError: Too many parameter values were provided`.
+  const r = buscar({ category: ["Fruta", "Frutas"] });
+  assert.strictEqual(r.total, 7);
+  assert.deepStrictEqual([...new Set(r.items.map((p) => p.category))].sort(), ["Fruta", "Frutas"]);
+});
+
+test("y no arrastra pasillos que no se pidieron", () => {
+  assert.ok(!buscar({ category: ["Fruta", "Frutas"] }).items.some((p) => p.category === "Carnes"));
+});
+
+test("varios category se combinan con categoria_canonica, como los pide la app", () => {
+  // Es literalmente lo que manda la pantalla: el cajón + los nombres de la fila.
+  const r = buscar({ categoria_canonica: "frutas_verduras", category: ["Fruta", "Frutas"] });
+  assert.strictEqual(r.total, 7);
+  // Y el cajón por sí solo trae más que la fila: la fila acota de verdad.
+  assert.ok(buscar({ categoria_canonica: "frutas_verduras" }).total > 7);
+});
+
+test("un category repetido con valores vacíos no filtra por cadena vacía", () => {
+  // `?category=&category=Fruta` tiene que valer lo mismo que `?category=Fruta`,
+  // igual que un `?category=` a secas no filtra.
+  assert.strictEqual(buscar({ category: ["", "Fruta"] }).total, 3);
+  assert.strictEqual(buscar({ category: ["", "  "] }).total, buscar({}).total);
+});
+
+test("los duplicados no multiplican filas", () => {
+  // El IN es de conjunto: pedir dos veces el mismo nombre no duplica productos.
+  assert.strictEqual(buscar({ category: ["Fruta", "Fruta"] }).total, 3);
+});
+
+test("varios category también acotan el conteo de pasillos", () => {
+  // buildWhere es compartido, así que /pasillos hereda el filtro sin tocarlo.
+  const r = productModel.countByAisle({ category: ["Fruta", "Frutas"] }).pasillos;
+  assert.deepStrictEqual(r, [
+    { supermercado: "dia", aisle: "Frutas", total: 4 },
+    { supermercado: "mercadona", aisle: "Fruta", total: 3 },
+  ]);
+});
+
+test("varios category llegan por HTTP tal como express los entrega", () => {
+  // express da un array cuando el parámetro viene repetido; el controller lo
+  // pasa tal cual y el modelo es el que decide `=` o `IN`.
+  const res = llamar(productController.list, { category: ["Fruta", "Frutas"] });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.body.total, 7);
+});
+
 fs.rmSync(DB_PATH, { force: true });
 
 console.log(`${passed} pruebas ok`);
