@@ -356,6 +356,36 @@ function esCanonica(valor) {
   return typeof valor === "string" && ID_CANONICAS.has(valor);
 }
 
+// Valores de `category_source`. Los tres primeros dicen de qué pasada salió el
+// cajón; los dos últimos dicen por qué NO hay cajón, que es información distinta:
+// "la etiqueta miente, decide el nombre" no es lo mismo que "no supe".
+// Mezclarlos hacía que /categorias reportara 8.869 sin clasificar cuando los
+// realmente sin resolver eran 2.846.
+const FUENTE_NO_FIABLE = "no_fiable";
+const FUENTE_FUERA_DE_ALCANCE = "fuera_de_alcance";
+
+// Las cuatro columnas que se guardan, derivadas en un solo sitio. Antes esto
+// estaba duplicado entre el ingest y el script de recategorización, que es
+// justo la clase de duplicación que hace que las dos copias se separen.
+function columnsFor(product) {
+  const { canonical, aisle, source } = resolve(product);
+  const cajon = esCanonica(canonical);
+
+  let fuente = null;
+  if (cajon) fuente = source;
+  else if (canonical === NO_FIABLE) fuente = FUENTE_NO_FIABLE;
+  else if (canonical === FUERA_DE_ALCANCE) fuente = FUENTE_FUERA_DE_ALCANCE;
+
+  return {
+    category_path: pathToString(
+      Array.isArray(product.category_path) ? product.category_path : pathToArray(product.category_path)
+    ),
+    aisle: aisle || null,
+    canonical_category: cajon ? canonical : null,
+    category_source: fuente,
+  };
+}
+
 function canonicaPorId(id) {
   return CANONICAS.find((c) => c.id === id) || null;
 }
@@ -364,6 +394,9 @@ module.exports = {
   CANONICAS,
   FUERA_DE_ALCANCE,
   NO_FIABLE,
+  FUENTE_NO_FIABLE,
+  FUENTE_FUERA_DE_ALCANCE,
+  columnsFor,
   SEPARADOR,
   resolve,
   aisleFrom,

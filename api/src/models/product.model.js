@@ -1,7 +1,7 @@
 const db = require("../config/db");
 const { parseSearchQuery, ftsExpression, sizeBand } = require("../lib/search");
 const { productSize, normalizeName, unitAliases } = require("../lib/matching");
-const { CANONICAS, canonicaPorId } = require("../lib/categories");
+const { CANONICAS, FUENTE_NO_FIABLE } = require("../lib/categories");
 
 const FTS_JOIN = "JOIN products_fts ON products_fts.rowid = p.id";
 
@@ -291,15 +291,26 @@ function countByCanonical(filters = {}) {
     supermercados: porId.get(c.id).supermercados,
   }));
 
+  // Los que no tienen cajón son dos cosas distintas y hay que contarlas aparte:
+  // "la etiqueta miente, decide el nombre" no es "no supe". Mezclarlos triplicaba
+  // el número que la app enseña como productos sin categoría.
   const where = clauses.slice(0, -1);
-  const sinCajon = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM products p
-        ${where.length ? `WHERE ${where.join(" AND ")} AND` : "WHERE"} p.canonical_category IS NULL`
-    )
-    .get(...params).n;
+  const prefijo = where.length ? `WHERE ${where.join(" AND ")} AND` : "WHERE";
+  const contar = (extra, extraParams = []) =>
+    db
+      .prepare(`SELECT COUNT(*) AS n FROM products p ${prefijo} ${extra}`)
+      .get(...params, ...extraParams).n;
 
-  return { categorias, sin_clasificar: sinCajon };
+  return {
+    categorias,
+    // No supimos resolverla con ninguna pasada del mapa.
+    sin_clasificar: contar("p.canonical_category IS NULL AND p.category_source IS NULL"),
+    // La etiqueta de la cadena no sirve (campañas, categorías mixtas): el cajón
+    // tiene que salir del nombre del producto, que es el paso que falta.
+    etiqueta_no_fiable: contar("p.canonical_category IS NULL AND p.category_source = ?", [
+      FUENTE_NO_FIABLE,
+    ]),
+  };
 }
 
 function insertMany(rows) {

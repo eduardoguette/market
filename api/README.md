@@ -41,13 +41,23 @@ honesto y visible.
 ```
 GET /categorias
 { "categorias": [ { "id": "lacteos_huevos", "nombre": "Lácteos y huevos",
-                    "alimentacion": true, "total": 2383, "supermercados": 6 } ],
-  "sin_clasificar": 8860 }
+                    "alimentacion": true, "total": 2347, "supermercados": 6 } ],
+  "sin_clasificar": 2846,
+  "etiqueta_no_fiable": 5802 }
 ```
 
 El orden es el del mapa (el de los pasillos de un supermercado real), no alfabético
-ni por volumen. `alimentacion` separa comida de lo que se compra en el súper sin
+ni por volumen. **`alimentacion`** separa comida de lo que se compra en el súper sin
 serlo, para que la UI agrupe sin saber de taxonomías.
+
+**No hay `en_alcance`, y es a propósito**: todo cajón que devuelve este endpoint es
+de alcance por construcción, porque lo que queda fuera nunca recibe cajón. Un campo
+siempre `true` no informa de nada. El flag que sirve para agrupar es `alimentacion`.
+
+Los dos conteos de abajo son cosas distintas y por eso van separados:
+`sin_clasificar` es "ninguna pasada del mapa la resolvió" y `etiqueta_no_fiable` es
+"la etiqueta de la cadena miente (campañas, categorías mixtas) y el cajón tiene que
+salir del nombre del producto". Sumarlos triplica el problema aparente.
 
 El flujo que habilita es el que pidió el usuario: **categoría → pasillo de cada
 cadena → productos**.

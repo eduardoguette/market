@@ -172,19 +172,15 @@ const FIXTURES = [
 ];
 
 productModel.insertMany(
-  FIXTURES.map(([supermercado, category, category_path, name]) => {
-    const { canonical, aisle, source } = categorias.resolve({ supermercado, category, category_path });
-    return {
-      supermercado, name, category,
-      category_path: categorias.pathToString(category_path),
-      aisle,
-      canonical_category: categorias.esCanonica(canonical) ? canonical : null,
-      category_source: categorias.esCanonica(canonical) ? source : null,
-      price_eur: 1.5, price_per_unit_eur: 1.5, measure_unit: "ud",
-      ean13: null, brand: null, image: null, url: null,
-      is_offer: 0, price_before: null, is_new: 0,
-    };
-  })
+  FIXTURES.map(([supermercado, category, category_path, name]) => ({
+    supermercado, name, category,
+    // Se derivan con la misma función que usa el ingest, que es el punto de tener
+    // una sola: si el test derivara a mano podría pasar mientras producción falla.
+    ...categorias.columnsFor({ supermercado, category, category_path }),
+    price_eur: 1.5, price_per_unit_eur: 1.5, measure_unit: "ud",
+    ean13: null, brand: null, image: null, url: null,
+    is_offer: 0, price_before: null, is_new: 0,
+  }))
 );
 
 test("las columnas de la taxonomía se guardan", () => {
@@ -203,15 +199,65 @@ test("lo no resuelto se guarda como null, no con un cajón inventado", () => {
 });
 
 test("countByCanonical devuelve los cajones con nombre y si son alimentación", () => {
-  const { categorias: cajones, sin_clasificar } = productModel.countByCanonical();
+  const { categorias: cajones } = productModel.countByCanonical();
   const ids = cajones.map((c) => c.id);
   assert.ok(ids.includes("lacteos_huevos") && ids.includes("carne"));
   const lacteos = cajones.find((c) => c.id === "lacteos_huevos");
   assert.strictEqual(lacteos.nombre, "Lácteos y huevos");
   assert.strictEqual(lacteos.alimentacion, true);
   assert.strictEqual(lacteos.total, 2);
-  // Los no resueltos y los no fiables se cuentan aparte, no se esconden.
-  assert.strictEqual(sin_clasificar, 3);
+});
+
+test("el flag que se devuelve es alimentacion, y los de comida vienen en true", () => {
+  // No hay `en_alcance`: todo cajón canónico es de alcance por construcción, porque
+  // lo que queda fuera nunca recibe cajón. Un campo siempre true no informa de nada,
+  // y devolverlo hacía que la app leyera undefined y escondiera el catálogo entero.
+  const cajones = productModel.countByCanonical().categorias;
+  assert.ok(!("en_alcance" in cajones[0]), "en_alcance no debería existir");
+  const comida = cajones.find((c) => c.id === "lacteos_huevos");
+  const noComida = categorias.CANONICAS.find((c) => c.id === "limpieza_drogueria");
+  assert.strictEqual(comida.alimentacion, true);
+  assert.strictEqual(noComida.alimentacion, false);
+  // Todos los cajones de comida del mapa lo declaran.
+  for (const id of ["frutas_verduras", "carne", "despensa", "bebidas"]) {
+    assert.strictEqual(categorias.canonicaPorId(id).alimentacion, true, id);
+  }
+});
+
+test("sin_clasificar y etiqueta_no_fiable son cosas distintas y se cuentan aparte", () => {
+  // Mezclarlos triplicaba el número: el endpoint decía 8.869 cuando los realmente
+  // sin resolver eran 2.846. "La etiqueta miente" no es "no supe".
+  const r = productModel.countByCanonical();
+  assert.strictEqual(r.etiqueta_no_fiable, 1); // el de Folletos y Promociones
+  assert.strictEqual(r.sin_clasificar, 1); // el de "Máquina líquido"
+  // Y el de lidl fuera de alcance no cae en ninguno de los dos.
+  assert.notStrictEqual(r.sin_clasificar + r.etiqueta_no_fiable, 3);
+});
+
+test("category_source dice por qué no hay cajón, no sólo de dónde salió", () => {
+  const { items } = productModel.findAll({ q: "carbonell" }, { limit: 5, offset: 0 });
+  assert.strictEqual(items[0].canonical_category, null);
+  assert.strictEqual(items[0].category_source, categorias.FUENTE_NO_FIABLE);
+
+  const raro = productModel.findAll({ q: "sin resolver" }, { limit: 5, offset: 0 }).items[0];
+  assert.strictEqual(raro.category_source, null);
+
+  const fuera = productModel.findAll({ q: "destornillador" }, { limit: 5, offset: 0 }).items[0];
+  assert.strictEqual(fuera.category_source, categorias.FUENTE_FUERA_DE_ALCANCE);
+});
+
+test("columnsFor es la única derivación, para que ingest y recategorize no divergan", () => {
+  // El bug de `en_alcance` salió de tener la forma documentada en un sitio y la
+  // implementada en otro; esto evita la versión de datos del mismo problema.
+  const col = categorias.columnsFor({
+    supermercado: "bm", category: "Ternera", category_path: ["Frescos", "Carnicería", "Ternera"],
+  });
+  assert.deepStrictEqual(Object.keys(col).sort(), [
+    "aisle", "canonical_category", "category_path", "category_source",
+  ]);
+  assert.strictEqual(col.canonical_category, "carne");
+  assert.strictEqual(col.category_path, "Frescos > Carnicería > Ternera");
+  assert.strictEqual(col.aisle, "Ternera");
 });
 
 test("el orden de los cajones es el del mapa, no alfabético ni por volumen", () => {
@@ -239,7 +285,7 @@ test("los endpoints responden con la forma acordada", () => {
   const res = { statusCode: 200, body: null, status(c) { this.statusCode = c; return this; }, json(p) { this.body = p; return this; } };
   productController.categorias({ query: {} }, res);
   assert.strictEqual(res.statusCode, 200);
-  assert.deepStrictEqual(Object.keys(res.body), ["categorias", "sin_clasificar"]);
+  assert.deepStrictEqual(Object.keys(res.body), ["categorias", "sin_clasificar", "etiqueta_no_fiable"]);
   assert.deepStrictEqual(Object.keys(res.body.categorias[0]), ["id", "nombre", "alimentacion", "total", "supermercados"]);
 });
 
