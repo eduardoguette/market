@@ -7,14 +7,18 @@ dependencias externas (nada de Postgres/Supabase).
 
 Auth: header `Authorization: Bearer <MARKET_API_TOKEN>`.
 
-- `GET /products?supermercado=&category=&q=&ean13=&is_offer=&is_new=&sort=&limit=&offset=`
+- `GET /products?supermercado=&category=&q=&ean13=&measure_unit=&is_offer=&is_new=&sort=&limit=&offset=`
   — `is_offer`/`is_new` aceptan `true|false|1|0|si|no`; cualquier otro valor no filtra.
   Ver abajo cómo funcionan `q` y `sort`.
 - `GET /supermercados?is_offer=&is_new=` — conteo de productos por cadena. Con
   `is_new`/`is_offer` devuelve **sólo las cadenas que tienen algo**, para no
   ofrecer un filtro de novedades en una cadena que no trae ninguna.
+- `GET /products/:id` — un producto por id (404 si no existe). Hace falta para que
+  un enlace directo a un producto funcione sin haber pasado por el listado.
 - `GET /pasillos?supermercado=&min_total=&limit=&is_offer=&is_new=` — los pasillos
   de una cadena
+- `GET /unidades?supermercado=&is_offer=&is_new=` — las unidades del catálogo con su
+  conteo, para poder ofrecer el filtro `measure_unit` sin adivinarlas
 - `POST /comparar-bolsa` — cuánto costaría la misma bolsa en otra cadena
 - `GET /healthz` — sin auth
 
@@ -66,6 +70,16 @@ devolver el catálogo en un orden que nadie pidió.
 conviene", que no es lo mismo: la garrafa de aceite de oliva de 5 l es de lo más
 caro del catálogo en absoluto (17,75 €) y de lo más barato por litro (3,55 €/l).
 Para decidir una compra suele importar el segundo.
+
+**`unit_price_asc` sólo tiene sentido con `measure_unit` fijado.** Las unidades del
+catálogo no son convertibles entre sí (`kg`, `l`, `ud`, y una cola de `lavado`,
+`docena`, `capsula`, `kg.peso esc`), así que ordenar por €/unidad sin filtrar mezcla
+€/kg con €/lavado y devuelve los detergentes primero por costar céntimos por lavado.
+La API no lo impone —ordenar no debería cambiar el conjunto devuelto— pero el
+cliente debería ofrecer el criterio sólo junto a una unidad elegida. `GET /unidades`
+da la lista. La cola sucia deja de ser ruido y se vuelve consultable a propósito:
+`?measure_unit=lavado&sort=unit_price_asc` es "el detergente más barato por lavado",
+que es justo la comparación que quiere quien compra.
 
 Los productos sin precio quedan **siempre al final**, en las dos direcciones
 (sqlite por defecto ordena los `NULL` primero, así que "los más baratos" abriría

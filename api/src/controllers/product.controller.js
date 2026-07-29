@@ -33,6 +33,7 @@ function list(req, res) {
       category,
       ean13,
       q,
+      measure_unit: req.query.measure_unit,
       is_offer: parseBoolFlag(req.query.is_offer),
       is_new: parseBoolFlag(req.query.is_new),
     },
@@ -40,6 +41,33 @@ function list(req, res) {
   );
 
   res.json({ total, limit, offset, sort: sort || (q ? "relevance" : null), items });
+}
+
+// Un producto por id, para que un enlace directo a un producto funcione: la app
+// recibía el objeto por parámetro de navegación, así que al abrir el enlace desde
+// fuera no tenía de dónde sacarlo.
+function detail(req, res) {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "id debe ser un entero positivo" });
+  }
+
+  const product = productModel.findById(id);
+  if (!product) return res.status(404).json({ error: "producto no encontrado" });
+
+  res.json(product);
+}
+
+// Las unidades del catálogo con su conteo, para que la app pueda ofrecer el filtro
+// de `measure_unit` sin adivinar cuáles existen.
+function unidades(req, res) {
+  res.json(
+    productModel.countByMeasureUnit({
+      supermercado: req.query.supermercado,
+      is_offer: parseBoolFlag(req.query.is_offer),
+      is_new: parseBoolFlag(req.query.is_new),
+    })
+  );
 }
 
 function supermercados(req, res) {
@@ -74,4 +102,4 @@ function pasillos(req, res) {
   res.json({ total, limit: limit || null, min_total: minTotal, pasillos: lista });
 }
 
-module.exports = { list, supermercados, pasillos, parseBoolFlag };
+module.exports = { list, detail, unidades, supermercados, pasillos, parseBoolFlag };
