@@ -86,6 +86,8 @@ function main() {
     // Nombres de producto de las cadenas limpias, si se pasan.
     for (const row of JSON.parse(fs.readFileSync(args.catalogo, "utf8"))) {
       if (!limpias.has(String(row.supermercado).toLowerCase())) continue;
+      // categoriaNoFiable ya cubre las filas sin categoría, que no son evidencia
+      // de nada: es justo donde las cadenas limpias esconden su bazar.
       if (scope.categoriaNoFiable(row.supermercado, row.category)) continue;
       if (scope.categoriaFueraDeAlcance(row.supermercado, row.category)) continue;
       const h = cabeza(row.name);

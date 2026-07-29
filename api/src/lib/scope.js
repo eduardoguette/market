@@ -182,6 +182,7 @@ const INEQUIVOCOS = {
   bascula: "electrodomesticos",
   taladro: "bricolaje", destornillador: "bricolaje", alicates: "bricolaje",
   martillo: "bricolaje", tornillos: "bricolaje",
+  herramienta: "bricolaje", herramientas: "bricolaje",
   lija: "bricolaje", soldador: "bricolaje", velcro: "bricolaje",
   manguera: "jardin", regadera: "jardin", maceta: "jardin",
   macetero: "jardin", cortacesped: "jardin", parasol: "jardin",
@@ -248,6 +249,13 @@ const CABEZA = {
   juego: "menaje", silla: "menaje", sillon: "menaje", mesa: "menaje",
   plancha: "electrodomesticos", microondas: "electrodomesticos",
   cafetera: "electrodomesticos", sierra: "bricolaje", parrilla: "menaje",
+  // Vistas en el pasillo de oportunidades de aldi. Van en cabeza y no en
+  // cualquier posición porque son palabras que de modificador cambian de
+  // sentido ("huevos vestidos", "arroz de la arrocera").
+  vestido: "textil", vestidos: "textil", sandalias: "textil",
+  sandalia: "textil", chandal: "textil", sello: "papeleria",
+  sellos: "papeleria", estampador: "papeleria", maletin: "papeleria",
+  arrocera: "electrodomesticos",
   cable: "tecnologia", pintura: "bricolaje", brocha: "bricolaje",
   pegamento: "bricolaje", cinta: "bricolaje", silicona: "bricolaje",
   tierra: "jardin", abono: "jardin", libro: "libros",
@@ -515,8 +523,13 @@ function categoriaFueraDeAlcance(supermercado, category) {
 }
 
 function categoriaNoFiable(supermercado, category) {
+  // Sin categoría no hay etiqueta en la que confiar, así que hay que mirar el
+  // nombre. Es lo que pasa con las 103 filas sin categoría de aldi, que son su
+  // pasillo de oportunidades: sartenes, destornilladores, pijamas y freidoras.
+  // Tratarlas como fiables las dejaba dentro del catálogo sin revisar.
+  if (!category || !String(category).trim()) return true;
   const set = CATEGORIAS_NO_FIABLES[String(supermercado || "").toLowerCase()];
-  return Boolean(set && category && set.has(category));
+  return Boolean(set && set.has(category));
 }
 
 // Decisión completa: primero la categoría cuando es fiable, y sólo si no lo es se

@@ -379,6 +379,43 @@ test("Hogar y Decoración es no fiable: dentro hay consumibles que se quedan", (
   assert.strictEqual(r.decision, scope.MANTENER);
 });
 
+test("sin categoría no hay etiqueta fiable: se mira el nombre", () => {
+  // Las 103 filas sin categoría de aldi son su pasillo de oportunidades:
+  // sartenes, destornilladores y pijamas. Tratarlas como fiables las dejaba
+  // dentro del catálogo sin que nadie las revisara.
+  assert.ok(scope.categoriaNoFiable("aldi", null));
+  assert.ok(scope.categoriaNoFiable("aldi", "   "));
+  assert.ok(!scope.categoriaNoFiable("aldi", "Limpieza y hogar"));
+
+  const r = scope.decide({ supermercado: "aldi", category: null, name: "Sartén ø 28 cm" });
+  assert.strictEqual(r.decision, scope.DESCARTAR);
+  assert.strictEqual(r.via, "nombre");
+  assert.strictEqual(
+    scope.decide({ supermercado: "aldi", category: null, name: "Yogur natural" }).decision,
+    scope.MANTENER
+  );
+});
+
+test("el vocabulario corto de aldi también se pilla", () => {
+  // Nombres de dos palabras, sin material ni medidas: hacen falta las palabras.
+  for (const caso of ["Vestido de muselina", "Sandalias", "Arrocera", "Maletín de actividades", "Herramienta rotativa 4 V"]) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "aldi", category: null, name: caso }).decision,
+      scope.DESCARTAR,
+      `"${caso}" no se descartó`
+    );
+  }
+});
+
+test("pero no a costa de la comida", () => {
+  // "Globo de chocolate" hizo descartar una regla de "globo" que sólo servía para
+  // un producto: se quitó. Y "ternera" acaba en -era sin ser un recipiente, así
+  // que el patrón -era/-ero no se puede generalizar.
+  for (const caso of ["Globo de chocolate", "Ternera picada", "Filete de ternera", "Huevos vestidos", "Arroz redondo"]) {
+    assert.notStrictEqual(scope.classify({ name: caso }).decision, scope.DESCARTAR, `"${caso}" se descartó`);
+  }
+});
+
 test("mascotas y limpieza NO están en la lista negra de categorías", () => {
   // Se incluyen en el alcance a propósito: el usuario las quiere dentro.
   assert.ok(!scope.categoriaFueraDeAlcance("alcampo", "Mascotas"));
