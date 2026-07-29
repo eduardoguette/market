@@ -204,15 +204,80 @@ test("las marcas de comida de alcampo no se confunden con las de bazar", () => {
 
 // --- Lo ambiguo no se borra ------------------------------------------------
 
-test("lo discutible sale como dudoso, no como descarte", () => {
-  for (const caso of ["Pilas alcalinas AA 4 uds", "Bombilla LED E27"]) ambiguo(caso);
+test("el plato y el vaso sin material siguen en dudoso: ahí hay mezcla real", () => {
+  // Entre los dudosos reales conviven platos de cartón y platos de loza, así que
+  // sin material en el nombre la cabeza sola no alcanza para decidir.
+  ambiguo("Platos de 27 centímetros de diámetro, 5 unidades");
+  ambiguo("Set de 4 vasos Sidra 520cc");
 });
 
-test("el plato y el vaso siguen en dudoso: ahí sí hay mezcla real", () => {
-  // Entre los dudosos reales hay platos de cartón de P&H y platos de loza de
-  // Santa Clara, así que la cabeza sola no alcanza para decidir.
-  ambiguo("Platos de 27 centímetros de diámetro P&H 5 unidades");
-  ambiguo("Set de 4 vasos Sidra 520cc");
+// --- pilas, bombillas y luces: criterio amplio de consumible de hogar -------
+
+test("pilas, bombillas y cargadores de pilas se quedan", () => {
+  for (const caso of [
+    "Pilas alcalinas AA 4 uds",
+    "Pila alcalina AAA LR03",
+    "Bombilla Led E27, 8,5W=75W, luz fría 4000K, 1055lm, PHILIPS",
+    "Pack de 2 bombillas Led E27, 7W=60W, PHILIPS",
+    "Cargador de pilas AA y AAA, cable Usb",
+    "Luz solar 11cm, GARDENSTAR",
+    "luz solar colgante con bombilla para jardín, GARDEN STAR",
+  ]) dentro(caso);
+});
+
+test("la bombilla de coche no se cuela con las de casa", () => {
+  // Casquillo H7: es automóvil, no iluminación de hogar.
+  fuera("Bombillas H7, 4000K, 55W, +130% visión, SUPERLITE WHITE PRO");
+});
+
+test("el cargador del móvil tampoco: sólo se protege el de pilas", () => {
+  fuera("Cargador inalámbrico para móvil USB-C");
+});
+
+test("una palabra que sólo contiene 'pila' no activa la protección", () => {
+  // "pilates" contiene "pila" pero no es una pila.
+  fuera("Esterilla para yoga/pilates 140X50X0,5cm");
+});
+
+test("un juguete con luces no se salva por mencionar luces", () => {
+  fuera("Pista tren del oeste, con sonidos y luces, ONE TWO FUN");
+  fuera("Kit de luces para bicicleta, UMLED2 TNB");
+});
+
+// --- los huecos que encontró el auditor automático -------------------------
+
+test("los sinónimos de vela entran, pero el soporte de vela no", () => {
+  // Un tealight es una vela y no lleva la palabra: la lista estaba incompleta.
+  for (const caso of [
+    "Set 12 tealights perfumadas, aroma monoi, ACTUEL",
+    "Set de 24 tealights con aroma Monoi, 3 colores, ACTUEL",
+  ]) dentro(caso);
+  // Un portavelas es un soporte de vidrio, no una vela.
+  fuera("Portavelas de vidrio con doble uso, ACTUEL");
+  fuera("Posavelas de cristal, 5x5x3,2cm, ACTUEL");
+});
+
+test("la errata de la fuente también se cubre", () => {
+  // En los datos hay "Bobilla Led GU10", sin la m. Ninguna lista de términos lo
+  // habría previsto; lo encontró el inventario de sustantivos del auditor.
+  dentro("Bobilla Led GU10, 65W, luz fría, 4000K, 485lm, PHILIPS");
+});
+
+test("los envases desechables de comida entran", () => {
+  dentro("Envases de cartón para alimentos, 10 unidades, Planet Friendly");
+  dentro("Pack de 10 envases hechos de caña de azúcar");
+});
+
+test("P&H es marca de vajilla desechable, y sólo en alcampo", () => {
+  for (const caso of [
+    "20 platos P&H de cartón antigrasa",
+    "Bol Kraft de 16 centímetros, serie Bali Kraft P&H pack de 10 u",
+    "Moldes para magdalenas Nº8 P&H 50 unidades",
+  ]) dentro(caso);
+  assert.strictEqual(
+    scope.classify({ name: "Algo P&H de loza 21cm", supermercado: "mercadona" }).decision,
+    scope.DESCARTAR
+  );
 });
 
 // --- decisiones de producto: desechables y velas entran --------------------

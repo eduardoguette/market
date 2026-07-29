@@ -76,13 +76,28 @@ const PROTECCIONES = [
   //
   // "reutilizable" queda fuera a propósito: un vaso de plástico reutilizable es
   // menaje, y así lo deciden las reglas de más abajo en vez de esta protección.
-  /\b(desechable|un solo uso|monouso)\w*(?![^]*reutilizab)/,
-  /\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|palillo|palillos)\b[^]*\b(carton|papel|plastico|poliestireno|celulosa|pla)\b/,
-  /\b(carton|papel|plastico|poliestireno)\b[^]*\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas)\b/,
-  // Las velas se venden en supermercado de verdad: mercadona tiene su propia
-  // categoría "Velas y decoración". Sacarlas de alcampo y dejarlas en mercadona
-  // sería incoherente entre cadenas.
-  /\bvela\w*\b/,
+  /\b(desechable|un solo uso|un uso|monouso|usar y tirar)\w*(?![^]*reutilizab)/,
+  /\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|palillo|palillos|envase|envases|tarrina|tarrinas)\b[^]*\b(carton|papel|plastico|poliestireno|celulosa|caña de azucar|cana de azucar)\b/,
+  /\b(carton|papel|plastico|poliestireno|caña de azucar|cana de azucar)\b[^]*\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|envase|envases|tarrina|tarrinas)\b/,
+  // Las velas entran: mercadona tiene su propia categoría "Velas y decoración",
+  // así que sacarlas de alcampo y dejarlas en mercadona sería incoherente entre
+  // cadenas. Con sinónimos, porque un tealight es una vela y no lleva la palabra:
+  // ése fue el agujero, una lista de términos incompleta, el mismo fallo que los
+  // plurales. "portavelas" y "posavelas" quedan fuera a propósito: son soportes.
+  /\b(vela|tealight|candelita|lamparilla)\w*\b/,
+
+  // Consumibles de hogar de la familia de la pila y la bombilla. Criterio amplio,
+  // coherente con dejar las velas: mercadona tiene "Pilas y bolsas de basura" y
+  // ahorramás "Bombillas e iluminación" y "Pilas".
+  //
+  // Tres exclusiones que hacen falta o rescatarían bazar: la bombilla de coche
+  // (casquillos H7/H4/HB) es automóvil; "cargador" suelto es el del móvil, así que
+  // sólo se protege el de pilas; y de la iluminación se protege la lámpara suelta
+  // ("luz solar") pero no lo que lleva luces incorporadas, que puede ser un juguete.
+  /\bbo(m)?billas?\b(?![^]*\b(h[0-9]|hb[0-9]|xenon|halogeno)\b)/,
+  /\bpilas?\b/,
+  /\bcargador de pilas\b/,
+  /\b(luz solar|linterna|farolillo)\b/,
 
   // Papel, film y desechables de cocina: entran
   /\bpapel (higienico|de cocina|de horno|film|de aluminio|aluminio|absorbente|vegetal|de secar)\b/,
@@ -341,6 +356,9 @@ function cabezaDeNombre(lista) {
 // lleva entra por definición, aunque el nombre hable de cubos o de platos.
 const MARCAS_DE_ALCANCE = {
   mercadona: /\b(deliplus|bosque verde)\b/,
+  // P&H: verificado, sus 16 productos son vajilla desechable de fiesta. El & se
+  // pierde al normalizar el nombre, así que llega como "p h".
+  alcampo: /\bp h\b/,
 };
 
 function marcaDeAlcance(supermercado) {
