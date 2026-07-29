@@ -23,9 +23,13 @@ Auth: header `Authorization: Bearer <MARKET_API_TOKEN>`.
 Para poder navegar una cadena sin escribir nada en el buscador.
 
 ```json
-{ "total": 149, "min_total": 0,
+{ "total": 149, "limit": null, "min_total": 0,
   "pasillos": [ { "supermercado": "mercadona", "aisle": "Leche y bebidas vegetales", "total": 118 } ] }
 ```
+
+`total` son los pasillos que existen, no los que se devuelven: `limit` sólo recorta
+la lista, igual que en `/products`. `min_total` sí cambia el `total`, porque ahí lo
+que cambia es el conjunto.
 
 El `aisle` sirve tal cual para `GET /products?category=<aisle>&supermercado=<cadena>`,
 que es la otra mitad del caso: entrar en el pasillo y ver sus productos.

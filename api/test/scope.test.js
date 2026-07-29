@@ -205,16 +205,82 @@ test("las marcas de comida de alcampo no se confunden con las de bazar", () => {
 // --- Lo ambiguo no se borra ------------------------------------------------
 
 test("lo discutible sale como dudoso, no como descarte", () => {
-  for (const caso of ["Pilas alcalinas AA 4 uds", "Bombilla LED E27", "Vela perfumada de vainilla"]) {
-    ambiguo(caso);
-  }
+  for (const caso of ["Pilas alcalinas AA 4 uds", "Bombilla LED E27"]) ambiguo(caso);
 });
 
-test("el menaje que se cruza con el desechable queda en dudoso", () => {
-  // Un plato puede ser de loza (fuera) o de cartón (dentro), así que decide una
-  // persona en vez de una regla.
-  ambiguo("Platos de postre 19cm 10 unidades");
-  ambiguo("Vasos de plástico 250ml 25 uds");
+test("el plato y el vaso siguen en dudoso: ahí sí hay mezcla real", () => {
+  // Entre los dudosos reales hay platos de cartón de P&H y platos de loza de
+  // Santa Clara, así que la cabeza sola no alcanza para decidir.
+  ambiguo("Platos de 27 centímetros de diámetro P&H 5 unidades");
+  ambiguo("Set de 4 vasos Sidra 520cc");
+});
+
+// --- decisiones de producto: desechables y velas entran --------------------
+
+test("la vajilla desechable entra: se compra junto a las servilletas", () => {
+  for (const caso of [
+    "Tenedores desechables de caña, 10 unidades, Planet Friendly ACTUEL",
+    "Set 36 cubiertos ACTUEL de madera desechables",
+    "Cucharas desechables de caña, 10 unidades",
+    "Cuchillos desechables de madera con mango decorado",
+    "Platos desechables de cartón color amarillo, 23cm, 10 unidades, ACTUEL",
+    "Vaso 23cl cartón 10unds decorados Limones ACTUEL",
+    "50 vasos de cartón 25cl, color blanco, ACTUEL",
+    "Mantel individual fibra de papel",
+    "Vasos de plástico desechables de tubo 0,3 litros NUPIK",
+  ]) dentro(caso);
+});
+
+test("el desechable gana a la regla de marca, que es lo que los partía en dos", () => {
+  // ACTUEL vende bazar Y desechables. Al mirarse la marca antes que el tipo de
+  // producto, los tenedores de cartón de ACTUEL acababan en la lista de borrado
+  // mientras los vasos de cartón de NUPIK sólo llegaban a dudoso.
+  const conMarca = clasificar("Tenedores desechables de cartón, 20 unidades, ACTUEL");
+  assert.strictEqual(conMarca.decision, scope.MANTENER);
+  assert.ok(/desechable/.test(conMarca.motivo), `ganó otra regla: ${conMarca.motivo}`);
+});
+
+test("pero el mismo utensilio reutilizable sigue fuera", () => {
+  fuera("Cuchara de madera de haya, 35 cm, ACTUEL");
+  fuera("Plato hondo de loza decorada acabado brillo, 21cm");
+  fuera("Copa de vino de vidrio facetado de 28cl, ACTUEL");
+});
+
+test("las velas entran: mercadona tiene su propia categoría de velas", () => {
+  for (const caso of [
+    "Set de velas 100 unidades, PRODUCTO ECONOMICO ALCAMPO",
+    "Vela perfumada frutos rojos en vaso pequeño de cristal",
+    "Set de velas aromáticas 12 unidades jazmín",
+    "VAHINÉ Velas dc comics superhéroes 15 uds",
+    "Vela cementerio de color blanca con tapa",
+  ]) dentro(caso);
+});
+
+test("los grupos que resultaron ser todos reutilizables ya no son dudosos", () => {
+  // En estos grupos no había ni un producto desechable entre los dudosos reales.
+  fuera("Cuchillo jamonero flexible de 24 centímetros, serie Mónaco ARCOS");
+  fuera("Cuchara de helado de acero inoxidable, ALCAMPO");
+  fuera("Tenedor de acero inoxidable oslo, ALCAMPO");
+  fuera("Taza desayuno 42cl, TOGNANA Iris");
+  fuera("Jarra para agua 1 litro LUMINARC");
+  fuera("Cazo aluminio estampado 16cm, Savia MAGEFESA");
+  fuera("Cesta de plástico para ropa, 33,5l");
+  fuera("Tijeras de modista para costura, 17cm");
+  fuera("Mantel vainica alg. 140x240cm beige");
+});
+
+test("un taper es menaje y una bolsa isotérmica también", () => {
+  fuera("Recipiente hermético cuadrado de plástico, 0,25 litros");
+  fuera("Set de 3 recipientes o tapers redondos, 0,5 L, ALCAMPO");
+  fuera("Bolsa de compra térmica con capacidad de 28 litros");
+  fuera("Bolsa porta alimentos color rojo más 2 tapers herméticos");
+});
+
+test("los consumibles de papel equivalentes siguen dentro", () => {
+  dentro("Manteles de papel 100x100cm");
+  dentro("Bolsas de basura 30L");
+  dentro("Servilletas de papel 33x33cm");
+  dentro("Papel de aluminio 30 metros", { measure_unit: "m" });
 });
 
 // --- La cascada: la categoría manda donde es fiable ------------------------

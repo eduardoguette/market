@@ -61,7 +61,7 @@ function pasillos(req, res) {
   const limitRaw = parseInt(req.query.limit, 10);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : undefined;
 
-  const pasillosList = productModel.countByAisle(
+  const { total, pasillos: lista } = productModel.countByAisle(
     {
       supermercado: req.query.supermercado,
       is_offer: parseBoolFlag(req.query.is_offer),
@@ -70,7 +70,8 @@ function pasillos(req, res) {
     { minTotal, limit }
   );
 
-  res.json({ total: pasillosList.length, min_total: minTotal, pasillos: pasillosList });
+  // `total` son los pasillos que existen; `pasillos` los que caben en el limit.
+  res.json({ total, limit: limit || null, min_total: minTotal, pasillos: lista });
 }
 
 module.exports = { list, supermercados, pasillos, parseBoolFlag };

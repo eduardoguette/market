@@ -63,6 +63,27 @@ const PROTECCIONES = [
   /\bpalomitas\b/,
   /\bpara (cafetera|microondas|freidora|sandwichera)\b/,
 
+
+  // Vajilla desechable y velas: decisión de producto, entran en el catálogo.
+  //
+  // La vajilla desechable se compra en el súper junto a las servilletas y el papel
+  // de aluminio, así que es consumible de hogar, la misma línea que el papel
+  // higiénico. Va como protección (y no como excepción más abajo) porque tiene que
+  // ganarle a la regla de marca: ACTUEL vende bazar Y desechables, y al mirarse la
+  // marca antes que el tipo de producto los tenedores de cartón de ACTUEL
+  // acababan en la lista de borrado mientras los vasos de cartón de NUPIK, misma
+  // cosa, sólo llegaban a dudoso.
+  //
+  // "reutilizable" queda fuera a propósito: un vaso de plástico reutilizable es
+  // menaje, y así lo deciden las reglas de más abajo en vez de esta protección.
+  /\b(desechable|un solo uso|monouso)\w*(?![^]*reutilizab)/,
+  /\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|palillo|palillos)\b[^]*\b(carton|papel|plastico|poliestireno|celulosa|pla)\b/,
+  /\b(carton|papel|plastico|poliestireno)\b[^]*\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas)\b/,
+  // Las velas se venden en supermercado de verdad: mercadona tiene su propia
+  // categoría "Velas y decoración". Sacarlas de alcampo y dejarlas en mercadona
+  // sería incoherente entre cadenas.
+  /\bvela\w*\b/,
+
   // Papel, film y desechables de cocina: entran
   /\bpapel (higienico|de cocina|de horno|film|de aluminio|aluminio|absorbente|vegetal|de secar)\b/,
   /\bservilletas?\b/,
@@ -171,7 +192,8 @@ const INEQUIVOCOS = {
   perchas: "menaje", textileno: "jardin",
   sarten: "menaje", sartenes: "menaje", cazuela: "menaje",
   cacerola: "menaje", vajilla: "menaje", cuberteria: "menaje",
-  rallador: "menaje", abrelatas: "menaje",
+  rallador: "menaje", abrelatas: "menaje", taper: "menaje",
+  tapers: "menaje", tupper: "menaje", tuppers: "menaje",
   sacacorchos: "menaje", exprimidor: "menaje", fiambrera: "menaje",
   cantimplora: "menaje", jarron: "menaje", portafotos: "menaje",
   puf: "menaje", taburete: "menaje", estanteria: "menaje",
@@ -189,6 +211,12 @@ const INEQUIVOCOS = {
 // el producto. De modificador significan otra cosa: "copa" abre una copa de
 // cristal (menaje) pero en "copa menstrual" es higiene.
 const CABEZA = {
+  // Vajilla y utensilios reutilizables. Sólo deciden en cabeza, y son seguros
+  // porque la vajilla desechable la protege una regla anterior.
+  cuchillo: "menaje", cuchillos: "menaje", cuchara: "menaje", cucharas: "menaje",
+  cucharon: "menaje", tenedor: "menaje", tenedores: "menaje", taza: "menaje",
+  tazas: "menaje", jarra: "menaje", cazo: "menaje", cesta: "menaje",
+  tijeras: "menaje", mantel: "textil", manteles: "textil",
   funda: "textil", fundas: "textil", manta: "textil", mantas: "textil",
   toalla: "textil", toallas: "textil", gorro: "textil", zapato: "textil",
   botas: "textil", mochila: "textil", bolso: "textil", maleta: "textil",
@@ -221,12 +249,12 @@ const DUDOSOS = new Set([
   // Menaje que se cruza con el desechable de cocina: un plato puede ser de loza
   // (fuera) o de cartón (dentro), así que decide una persona.
   "plato", "platos", "bol", "bandeja", "recipiente", "molde", "moldes",
-  "cubo", "cuchillo", "cuchillos", "tenedor", "cuchara", "cucharon", "cazo",
-  "taza", "tazas", "jarra", "cesta", "tijeras", "tabla",
+  "cubo", 
+  "tabla",
   "pila", "pilas", "bombilla", "bombillas", "vela", "velas", "linterna",
   "vaso", "vasos", "cubiertos", "pajitas", "mechero", "encendedor",
   "cepillo", "esponja", "peine", "cortauñas", "pinzas", "termometro",
-  "coche", "carrito", "cuna", "bañera", "orinal", "guantes", "mantel",
+  "coche", "carrito", "cuna", "bañera", "orinal", "guantes", 
   "palillos", "velas", "papel", "bolsa", "bolsas",
 ]);
 
@@ -265,6 +293,12 @@ const FRASES = [
   [/\bbateria (externa|de coche|recargable)\b/, "tecnologia"],
   [/\bcubo de (basura|fregar)\b/, "menaje"],
   [/\btabla de (planchar|cortar|surf)\b/, "menaje"],
+  // Un taper es menaje; las bolsas de basura y congelación ya están protegidas
+  // antes, así que una "bolsa" que llega hasta acá es una bolsa isotérmica.
+  [/\b(recipiente|recipientes|taper|tapers|tupper)\b[^]*\bhermetic/, "menaje"],
+  [/\bhermetic\w*[^]*\b(recipiente|recipientes|taper|tapers|tupper)\b/, "menaje"],
+  [/\bbolsa\w*\b[^]*\b(termica|isotermica|porta alimentos|de compra)\b/, "menaje"],
+  [/\bbolsa\w*\b[^]*\bnevera\b/, "menaje"],
   [/\bkit de costura\b/, "bricolaje"],
   [/\bcarro de (compra|la compra)\b/, "menaje"],
   [/\bclase energetica\b/, "electrodomesticos"],
@@ -399,7 +433,8 @@ function classify(product) {
 
   // 7. Sustantivo inicial.
   const cabeza = cabezaDeNombre(lista);
-  if (DUDOSOS.has(cabeza)) {
+  const cabezaSingular = cabeza.endsWith("s") ? cabeza.slice(0, -1) : cabeza;
+  if (DUDOSOS.has(cabeza) || DUDOSOS.has(cabezaSingular)) {
     return { decision: DUDOSO, motivo: `cabeza ambigua: "${cabeza}"`, familia: null };
   }
   if (Object.prototype.hasOwnProperty.call(CABEZA, cabeza)) {

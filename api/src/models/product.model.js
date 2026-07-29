@@ -185,16 +185,21 @@ function countByAisle(filters = {}, { minTotal = 0, limit } = {}) {
 
   // El desempate por nombre hace estable el orden entre pasillos con el mismo
   // número de productos, que en las cadenas granulares son muchísimos.
-  const sql = `SELECT p.supermercado, p.category AS aisle, COUNT(*) AS total
-                 FROM products p
-                WHERE ${clauses.join(" AND ")}
-                GROUP BY p.supermercado, p.category
-                ${having}
-                ORDER BY total DESC, p.category
-                ${limit ? "LIMIT ?" : ""}`;
+  const agrupado = `SELECT p.supermercado, p.category AS aisle, COUNT(*) AS total
+                      FROM products p
+                     WHERE ${clauses.join(" AND ")}
+                     GROUP BY p.supermercado, p.category
+                     ${having}`;
+
+  // El total cuenta los pasillos que hay, no los que se devuelven: `limit` sólo
+  // recorta la lista, igual que en findAll. Si contara después del recorte, quien
+  // consume la API no podría saber cuántos hay ni paginar.
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM (${agrupado})`).get(...params).n;
+
+  const sql = `${agrupado} ORDER BY total DESC, aisle ${limit ? "LIMIT ?" : ""}`;
   if (limit) params.push(limit);
 
-  return db.prepare(sql).all(...params);
+  return { total, pasillos: db.prepare(sql).all(...params) };
 }
 
 function findByIds(ids) {

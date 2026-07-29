@@ -55,7 +55,8 @@ add("aldi", "Limpieza y hogar", 2);
 
 productModel.insertMany(FIXTURES);
 
-const pasillos = (filters, opts) => productModel.countByAisle(filters, opts);
+const pasillos = (filters, opts) => productModel.countByAisle(filters, opts).pasillos;
+const contar = (filters, opts) => productModel.countByAisle(filters, opts).total;
 
 // --- el caso que motivó el endpoint ---------------------------------------
 
@@ -111,6 +112,19 @@ test("min_total no descarta nada cuando es 0", () => {
 test("limit corta la lista sin cambiar el orden", () => {
   const todos = pasillos({ supermercado: "ahorramas" });
   assert.deepStrictEqual(pasillos({ supermercado: "ahorramas" }, { limit: 2 }), todos.slice(0, 2));
+});
+
+test("el total cuenta los pasillos que hay, no los que devuelve el limit", () => {
+  // Misma semántica que en /products: si contara después del recorte, quien
+  // consume la API no podría saber cuántos hay ni paginar.
+  assert.strictEqual(contar({ supermercado: "ahorramas" }), 5);
+  assert.strictEqual(contar({ supermercado: "ahorramas" }, { limit: 2 }), 5);
+  assert.strictEqual(pasillos({ supermercado: "ahorramas" }, { limit: 2 }).length, 2);
+});
+
+test("el total sí respeta min_total, porque ahí cambia el conjunto", () => {
+  assert.strictEqual(contar({ supermercado: "ahorramas" }, { minTotal: 2 }), 3);
+  assert.strictEqual(contar({ supermercado: "ahorramas" }, { minTotal: 2, limit: 1 }), 3);
 });
 
 // --- datos sucios ---------------------------------------------------------
@@ -207,14 +221,17 @@ function llamar(handler, query) {
 test("el endpoint devuelve la forma acordada", () => {
   const res = llamar(productController.pasillos, { supermercado: "mercadona" });
   assert.strictEqual(res.statusCode, 200);
-  assert.deepStrictEqual(Object.keys(res.body), ["total", "min_total", "pasillos"]);
+  assert.deepStrictEqual(Object.keys(res.body), ["total", "limit", "min_total", "pasillos"]);
   assert.strictEqual(res.body.total, 3);
   assert.deepStrictEqual(Object.keys(res.body.pasillos[0]), ["supermercado", "aisle", "total"]);
 });
 
 test("min_total y limit llegan desde la query", () => {
   assert.strictEqual(llamar(productController.pasillos, { supermercado: "ahorramas", min_total: "2" }).body.total, 3);
-  assert.strictEqual(llamar(productController.pasillos, { supermercado: "ahorramas", limit: "2" }).body.total, 2);
+  const conLimit = llamar(productController.pasillos, { supermercado: "ahorramas", limit: "2" }).body;
+  assert.strictEqual(conLimit.total, 5, "el total no debe depender del limit");
+  assert.strictEqual(conLimit.pasillos.length, 2);
+  assert.strictEqual(conLimit.limit, 2);
 });
 
 test("min_total con basura se trata como 0 en vez de romper", () => {
