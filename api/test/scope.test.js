@@ -466,19 +466,76 @@ test("pero un DESCARTAR por nombre NO le gana a una categoría fiable y de alcan
   assert.strictEqual(scope.classify({ name: "Bolsa isotérmica" }).decision, scope.DESCARTAR);
 });
 
-test("las demás protecciones también cruzan la frontera de la categoría", () => {
-  // No es un parche para las pilas: es el orden, así que vale para todas.
+test("las protecciones FUERTES cruzan la frontera de la categoría", () => {
+  // No es un parche para las pilas: es el nivel de la protección, así que vale
+  // para todas las que identifican el tipo de producto.
   const casos = [
     ["Papelería", "Platos desechables de cartón, 20 unidades"],
     ["Juguetes", "Servilletas de papel 33x33cm 20 uds"],
     ["Textil", "Vela perfumada de vainilla"],
     ["Electrodomésticos", "Croquetas de jamón 500g"],
     ["Bricolaje", "Detergente para lavadora 40 lavados"],
+    ["Automóvil", "Papel de cocina 2 rollos"],
   ];
   for (const [category, name] of casos) {
     const r = scope.decide({ supermercado: "alcampo", category, name });
     assert.strictEqual(r.decision, scope.MANTENER, `"${name}" en ${category} se borró`);
+    assert.strictEqual(r.via, "proteccion");
   }
+});
+
+test("las protecciones CONTEXTUALES no cruzan la frontera", () => {
+  // Rescataban 1.175 productos de bazar: sustrato y mantillo por venderse por
+  // litro, ambientadores de coche, esmalte de pintura, tacos de lija. Ninguno
+  // está en una decisión del usuario, se colaban por efecto colateral.
+  const casos = [
+    ["Bricolaje", "Sustrato universal 5 l", "l"],
+    ["Jardín y terraza", "Mantillo natural 50 l", "l"],
+    ["Automóvil", "Agua desionizada 5 l", "l"],
+    ["Automóvil", "Ambientador de coche aroma pino", "ud"],
+    ["Bricolaje", "Carbón vegetal 4 kg", "kg"],
+    ["Bricolaje", "Esmalte sobre hierro y óxido, color negro 750ml", "l"],
+    ["Bricolaje", "Limpiador de útiles de pintura 1 l", "l"],
+    ["Jardín y terraza", "Insecticida para jardín concentrado", "l"],
+    ["Bricolaje", "Taco de lija grano medio 3 uds", "ud"],
+    ["Bricolaje", "Linterna táctica LED recargable", "ud"],
+    ["Jardín y terraza", "Luz solar de jardín con estaca", "ud"],
+    ["Bricolaje", "Detergente universal KARCHER 1 l", "l"],
+  ];
+  for (const [category, name, measure_unit] of casos) {
+    const r = scope.decide({ supermercado: "alcampo", category, name, measure_unit });
+    assert.strictEqual(r.decision, scope.DESCARTAR, `"${name}" se rescató desde ${category}`);
+    assert.strictEqual(r.via, "categoria");
+  }
+});
+
+test("pero las contextuales siguen protegiendo donde no hay categoría fiable", () => {
+  // Es para lo que se escribieron: desambiguar dentro de los huérfanos.
+  for (const [category, name] of [
+    ["Hogar y Decoración", "Limpiador multiusos con lejía 1 l"],
+    ["Folletos y Promociones", "Ambientador de varillas Mikado"],
+    ["Campañas", "Crema hidratante corporal 400ml"],
+    ["Hogar y Decoración", "Insecticida moscas y mosquitos 500ml"],
+    ["Folletos y Promociones", "Estropajo salvauñas 3 uds"],
+  ]) {
+    const r = scope.decide({ supermercado: "alcampo", category, name });
+    assert.strictEqual(r.decision, scope.MANTENER, `"${name}" se borró`);
+    assert.strictEqual(r.via, "nombre");
+  }
+});
+
+test("la unidad de medida nunca contradice a la categoría", () => {
+  // "Se vende por litro" es una propiedad del envase, no del producto: lo cumplen
+  // la pintura y el sustrato igual que el aceite. 531 rescates venían de aquí.
+  const r = scope.decide({
+    supermercado: "alcampo", category: "Bricolaje", name: "Producto raro sin señal", measure_unit: "l",
+  });
+  assert.strictEqual(r.decision, scope.DESCARTAR);
+  // Dentro de los huérfanos sí vale.
+  assert.strictEqual(
+    scope.decide({ supermercado: "alcampo", category: "Campañas", name: "Producto raro sin señal", measure_unit: "l" }).decision,
+    scope.MANTENER
+  );
 });
 
 test("las protecciones laxas se ajustaron para no rescatar bazar", () => {

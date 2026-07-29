@@ -33,109 +33,142 @@ const DUDOSO = "dudoso";
 // y Cacerolas" es limpieza aunque diga ollas, "Estropajo acero inoxidable" es
 // limpieza aunque diga acero, y "Lima fibra de vidrio" es cosmética aunque diga
 // vidrio.
+// Cada protección declara si es FUERTE o CONTEXTUAL, porque no todas son
+// evidencia de la misma calidad y eso decide si puede contradecir a la categoría.
+//
+//   FUERTE     identifica el TIPO de producto de forma inequívoca. Una pila es una
+//              pila esté catalogada en "Bricolaje" o en "Bazar", así que le gana a
+//              la etiqueta del retailer. Son las decisiones explícitas del usuario
+//              (pilas, bombillas, velas, desechables) más la comida, porque borrar
+//              comida es el único fallo inaceptable.
+//
+//   CONTEXTUAL heurística que sólo vale cuando no hay una categoría de la que
+//              fiarse. Son de dos tipos: propiedades del envase ("se vende por
+//              litro" lo cumplen la pintura y el sustrato igual que el aceite) y
+//              palabras polisémicas donde el sentido de supermercado y el de
+//              bricolaje conviven (esmalte de uñas / esmalte de pintura,
+//              ambientador de casa / de coche, taco de jamón / taco de lija).
+//              Siguen protegiendo dentro de los huérfanos, que es para lo que se
+//              escribieron, pero no contra una lista negra explícita.
+//
+// La prueba para clasificar cada una: ¿existe un producto con esta palabra en
+// Bricolaje, Automóvil o Jardín que NO sea de supermercado? Si existe, es
+// contextual.
+const FUERTE = "fuerte";
+const CONTEXTUAL = "contextual";
+
 const PROTECCIONES = [
-  // Productos de limpieza cuyo nombre menciona el objeto que limpian
-  /\blimpia(dor|cristales|hogar|muebles|metales|suelos)?\b/,
-  /\b(quitagrasas|desengrasante|abrillantador|desincrustante|antical|desatascador)\b/,
-  /\b(detergente|lejia|suavizante|friegasuelos|lavavajillas|amoniaco|salfuman|sosa caustica)\b/,
-  /\b(estropajo|fregona|bayeta|mopa|trapo|recambio de fregona|paño de cocina|panos? de cocina)\w*/,
-  /\b(ambientador|insecticida|antipolillas|desinfectante|quitamanchas|blanqueador|raticida)\b/,
-  /\bguantes? de (fregar|limpieza|latex|vinilo|nitrilo)\b/,
+  // --- Limpieza y droguería: contextual -------------------------------------
+  // Todo este bloque tiene gemelo en bricolaje y automóvil: limpiadores de útiles
+  // de pintura, detergente de hidrolimpiadora KARCHER, ambientadores de coche,
+  // insecticidas de jardín. Protegen bien dentro de los huérfanos y no deben
+  // rescatar nada de una categoría de bazar.
+  [/\blimpia(dor|cristales|hogar|muebles|metales|suelos)?\b/, CONTEXTUAL],
+  [/\b(quitagrasas|desengrasante|abrillantador|desincrustante|antical|desatascador)\b/, CONTEXTUAL],
+  // El detergente de la ropa y el del lavavajillas sí se identifican; el
+  // "detergente" a secas lo comparte la hidrolimpiadora KARCHER de Bricolaje.
+  [/\bdetergente (para |de )?(lavadora|ropa|prendas|colada|lavavajillas)\b/, FUERTE],
+  [/\bsuavizante (para |de )?(ropa|prendas|colada)\b/, FUERTE],
+  [/\b(detergente|lejia|suavizante|friegasuelos|lavavajillas|amoniaco|salfuman|sosa caustica)\b/, CONTEXTUAL],
+  [/\b(estropajo|fregona|bayeta|mopa|trapo|recambio de fregona|paño de cocina|panos? de cocina)\w*/, CONTEXTUAL],
+  [/\b(ambientador|insecticida|antipolillas|desinfectante|quitamanchas|blanqueador|raticida)\b/, CONTEXTUAL],
+  [/\bguantes? de (fregar|limpieza|latex|vinilo|nitrilo)\b/, CONTEXTUAL],
 
-  // Comida y bebida donde la palabra base es ambigua
-  /\baceite de (oliva|girasol|coco|semillas|colza|palma|orujo)\b/,
-  /\baceite (virgen|refinado|de sabor)\b/,
-  /\b(goma de mascar|chicle)/,
-  /\bsemillas? de \w+/,
-  /\bcopa de (helado|postre)\b/,
-  /\bplatos? (preparado|combinado)/,
-  /\bvasito/,
-  /\bcaldo\b/,
-  /\bpiña\b/,
+  // --- Comida y bebida: fuerte ---------------------------------------------
+  [/\baceite de (oliva|girasol|coco|semillas|colza|palma|orujo)\b/, FUERTE],
+  [/\baceite (virgen|refinado|de sabor)\b/, FUERTE],
+  [/\b(goma de mascar|chicle)/, FUERTE],
+  [/\bsemillas? de \w+/, FUERTE],
+  [/\bcopa de (helado|postre)\b/, FUERTE],
+  [/\bplatos? (preparado|combinado)/, FUERTE],
+  [/\bvasito/, FUERTE],
+  [/\bcaldo\b/, FUERTE],
+  [/\bpiña\b/, FUERTE],
 
+  // Comida preparada: sus nombres llevan justo las palabras de utensilio y de
+  // técnica de cocina que sirven para detectar bazar ("hamburguesa a la plancha",
+  // "bandeja de croquetas", "palomitas para microondas"), así que necesita
+  // protección propia. "taco" y "pincho" van acotados: un taco de lija y un
+  // pincho de jardín no son comida.
+  [/\b(tortilla|hamburguesa|croqueta|ensaladilla|pizza|canelon|lasaña|lasana|empanad|rebozad|precocinad|albondiga|nugget|flamenquin|san jacobo|paella|fideua|risotto|salchicha|escalope|brocheta|gazpacho|salmorejo|sopa|pure|guiso|estofado|cocido|fabada|callos|migas|salteado|wok|burrito|falafel|hummus|sushi|tortellini|ravioli|noqui|ñoqui|arancini|samosa|quiche|tarta|bocadillo|sandwich|wrap|kebab|pollo asado|asado)\w*/, FUERTE],
+  [/\btacos? de (maiz|jamon|queso|pollo|carne|atun|pavo|lomo)\b/, FUERTE],
+  [/\bpinchos? (de|moruno)\b/, FUERTE],
+  [/\b(a la (plancha|sarten|parrilla|brasa|barbacoa|romana)|al horno|al vapor|frito|asad[oa])\b/, FUERTE],
+  [/\bpalomitas\b/, FUERTE],
+  [/\bpara (cafetera|microondas|freidora|sandwichera)\b/, FUERTE],
 
-  // Comida preparada: es comida y va en la lista de la compra. Necesita
-  // protección propia porque sus nombres llevan justo las palabras de utensilio
-  // y de técnica de cocina que sirven para detectar bazar ("hamburguesa a la
-  // plancha", "bandeja de croquetas", "palomitas para microondas").
-  /\b(tortilla|hamburguesa|croqueta|ensaladilla|pizza|canelon|lasaña|lasana|empanad|rebozad|precocinad|albondiga|nugget|flamenquin|san jacobo|paella|fideua|risotto|salchicha|escalope|brocheta|pincho|gazpacho|salmorejo|sopa|pure|guiso|estofado|cocido|fabada|callos|migas|salteado|wok|burrito|taco|falafel|hummus|sushi|tortellini|ravioli|noqui|ñoqui|arancini|samosa|quiche|tarta|bocadillo|sandwich|wrap|kebab|pollo asado|asado)\w*/,
-  /\b(a la (plancha|sarten|parrilla|brasa|barbacoa|romana)|al horno|al vapor|frito|asad[oa])\b/,
-  /\bpalomitas\b/,
-  /\bpara (cafetera|microondas|freidora|sandwichera)\b/,
-
-
-  // Vajilla desechable y velas: decisión de producto, entran en el catálogo.
-  //
-  // La vajilla desechable se compra en el súper junto a las servilletas y el papel
-  // de aluminio, así que es consumible de hogar, la misma línea que el papel
-  // higiénico. Va como protección (y no como excepción más abajo) porque tiene que
-  // ganarle a la regla de marca: ACTUEL vende bazar Y desechables, y al mirarse la
-  // marca antes que el tipo de producto los tenedores de cartón de ACTUEL
-  // acababan en la lista de borrado mientras los vasos de cartón de NUPIK, misma
-  // cosa, sólo llegaban a dudoso.
+  // --- Vajilla desechable y velas: fuerte ----------------------------------
+  // Decisión explícita del usuario. Va como protección fuerte porque tiene que
+  // ganarle a la regla de marca (ACTUEL vende bazar Y desechables) y a la
+  // categoría (hay desechables catalogados en Papelería).
   //
   // "reutilizable" queda fuera a propósito: un vaso de plástico reutilizable es
-  // menaje, y así lo deciden las reglas de más abajo en vez de esta protección.
-  /\b(desechable|un solo uso|un uso|monouso|usar y tirar)\w*(?![^]*reutilizab)/,
-  /\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|palillo|palillos|envase|envases|tarrina|tarrinas)\b[^]*\b(carton|papel|plastico|poliestireno|celulosa|caña de azucar|cana de azucar)\b/,
-  /\b(carton|papel|plastico|poliestireno|caña de azucar|cana de azucar)\b[^]*\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|envase|envases|tarrina|tarrinas)\b/,
+  // menaje, y así lo deciden las reglas de más abajo.
+  [/\b(desechable|un solo uso|un uso|monouso|usar y tirar)\w*(?![^]*reutilizab)/, FUERTE],
+  [/\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|palillo|palillos|envase|envases|tarrina|tarrinas)\b[^]*\b(carton|papel|plastico|poliestireno|celulosa|caña de azucar|cana de azucar)\b/, FUERTE],
+  [/\b(carton|papel|plastico|poliestireno|caña de azucar|cana de azucar)\b[^]*\b(plato|platos|vaso|vasos|copa|copas|cubierto|cubiertos|tenedor|tenedores|cuchara|cucharas|cuchillo|cuchillos|mantel|manteles|bandeja|bandejas|bol|boles|cuenco|servilleta|servilletas|pajita|pajitas|envase|envases|tarrina|tarrinas)\b/, FUERTE],
+
   // Las velas entran: mercadona tiene su propia categoría "Velas y decoración",
-  // así que sacarlas de alcampo y dejarlas en mercadona sería incoherente entre
-  // cadenas. Con sinónimos, porque un tealight es una vela y no lleva la palabra:
-  // ése fue el agujero, una lista de términos incompleta, el mismo fallo que los
-  // plurales. "portavelas" y "posavelas" quedan fuera a propósito: son soportes.
-  /(?<!barco de )(?<!tabla de )\b(vela|tealight|candelita|lamparilla)\w*\b/,
+  // así que sacarlas de alcampo sería incoherente entre cadenas. Con sinónimos,
+  // porque un tealight es una vela y no lleva la palabra. "portavelas" y
+  // "posavelas" quedan fuera a propósito: son soportes, no velas.
+  [/(?<!barco de )(?<!tabla de )\b(vela|tealight|candelita|lamparilla)\w*\b/, FUERTE],
 
-  // Consumibles de hogar de la familia de la pila y la bombilla. Criterio amplio,
-  // coherente con dejar las velas: mercadona tiene "Pilas y bolsas de basura" y
-  // ahorramás "Bombillas e iluminación" y "Pilas".
+  // --- Pilas y bombillas: fuerte -------------------------------------------
+  // Decisión explícita del usuario, criterio amplio de consumible de hogar:
+  // mercadona tiene "Pilas y bolsas de basura" y ahorramás "Bombillas e
+  // iluminación". Una pila sigue siendo una pila en "Bricolaje", que es donde
+  // alcampo cataloga 197 packs.
   //
-  // Tres exclusiones que hacen falta o rescatarían bazar: la bombilla de coche
-  // (casquillos H7/H4/HB) es automóvil; "cargador" suelto es el del móvil, así que
-  // sólo se protege el de pilas; y de la iluminación se protege la lámpara suelta
-  // ("luz solar") pero no lo que lleva luces incorporadas, que puede ser un juguete.
-  /\bbo(m)?billas?\b(?![^]*\b(h[0-9]|hb[0-9]|xenon|halogeno)\b)/,
-  /\bpilas?\b(?! de (fregadero|lavadero|obra))/,
-  /\bcargador de pilas\b/,
-  /\b(luz solar|linterna|farolillo)\b/,
+  // La bombilla de coche (casquillos H7/HB) es automóvil, y "cargador" suelto es
+  // el del móvil, así que sólo se protege el de pilas.
+  [/\bbo(m)?billas?\b(?![^]*\b(h[0-9]|hb[0-9]|xenon|halogeno)\b)/, FUERTE],
+  [/\bpilas?\b(?! de (fregadero|lavadero|obra))/, FUERTE],
+  [/\bcargador de pilas\b/, FUERTE],
+  // La iluminación que no es bombilla es contextual: las linternas tácticas y las
+  // luces solares de jardín viven en Bricolaje y Jardín, y no son de la compra.
+  [/\b(luz solar|linterna|farolillo)\b/, CONTEXTUAL],
 
-  // Papel, film y desechables de cocina: entran
-  /\bpapel (higienico|de cocina|de horno|film|de aluminio|aluminio|absorbente|vegetal|de secar)\b/,
-  /\bservilletas?\b/,
-  /\bfilm (transparente|de cocina|adherente)\b/,
-  /\bbolsas? (de )?(basura|congelacion|conservacion|hielo|horno|sandwich|zip|fruta)\b/,
-  /\brollo de cocina\b/,
-  /\bmanteles? de papel\b/,
+  // --- Papel, film y desechables de cocina: fuerte -------------------------
+  [/\bpapel (higienico|de cocina|de horno|film|de aluminio|aluminio|absorbente|vegetal|de secar)\b/, FUERTE],
+  [/\bservilletas?\b/, FUERTE],
+  [/\bfilm (transparente|de cocina|adherente)\b/, FUERTE],
+  [/\bbolsas? (de )?(basura|congelacion|conservacion|hielo|horno|sandwich|zip|fruta)\b/, FUERTE],
+  [/\brollo de cocina\b/, FUERTE],
+  [/\bmanteles? de papel\b/, FUERTE],
 
-  // Cuidado personal y parafarmacia: entran
-  /\b(champu|acondicionador|gel de baño|gel de ducha|gel de manos|jabon|pasta de dientes|dentifrico|colutorio|enjuague bucal)\b/,
-  /\b(desodorante|antitranspirante|colonia|perfume|eau de (toilette|parfum)|after ?shave|espuma de afeitar)\b/,
-  // "crema" tambien es un color de textil ("toalla color crema"), y desde que la
-  // proteccion gana a la categoria eso rescataba toallas y mantas.
-  /(?<!color )(?<!tono )\bcremas?\b/,
-  /\b(serum|locion|mascarilla|exfoliante|tonico|contorno de ojos|protector solar|aftersun|fluido)\b/,
-  /\b(maquillaje|rimel|mascara de pestañas|pintalabios|barra de labios|esmalte|laca de uñas|corrector|colorete|sombra de ojos|delineador)\b/,
-  /\b(compresa|tampon|salvaslip|copa menstrual|protegeslip|higiene intima)\w*/,
-  /\b(pañal|panal|toallita|bastoncillo|discos? desmaquillante)\w*/,
-  // La gasa sanitaria va en plural o dice esteril; "algodon gasa" es una tela,
-  // y protegerla rescataba toallas ahora que la proteccion gana a la categoria.
-  /\bgasas\b|\bgasa (esteril|hidrofil)/,
-  /\balgodon (hidrofilo|magico)\b|\bdiscos? de algodon\b/,
-  /\b(cepillo de dientes|cepillo dental|seda dental|hilo dental|cinta dental|irrigador|colutorio)\b/,
-  /\bbrocha (de maquillaje|para polvos)\b/,
-  /\bmolde de papel\b/,
-  /\b(cuchillas?|maquinilla) de afeitar\b/,
-  /\b(preservativo|lubricante intimo|test de embarazo|suero fisiologico|alcohol sanitario|agua oxigenada|tirita|venda|esparadrapo)\w*/,
-  /\b(ibuprofeno|paracetamol|aspirina|jarabe|vitamina|complemento alimenticio|suplemento|probiotico)\b/,
-  /\b(tinte|coloracion|decolorante|champu|mascarilla capilar)\b/,
-  /\bmascarilla (ffp2|quirurgica|higienica)\b/,
-  /\blima (de uñas|fibra)\b/,
-  /\b(quitaesmalte|acetona)\b/,
+  // --- Cuidado personal y parafarmacia ------------------------------------
+  // Casi todo es identidad de producto y va fuerte. Las excepciones son las
+  // palabras que también nombran material de pintura o de papelería: "esmalte"
+  // (de uñas / sobre hierro), "corrector" (de ojeras / Tipp-Ex), "mascarilla"
+  // (capilar / de pintor), "laca" (de uñas / de madera).
+  [/\b(champu|acondicionador|gel de baño|gel de ducha|gel de manos|jabon|pasta de dientes|dentifrico|colutorio|enjuague bucal)\b/, FUERTE],
+  [/\b(desodorante|antitranspirante|colonia|perfume|eau de (toilette|parfum)|after ?shave|espuma de afeitar)\b/, FUERTE],
+  [/(?<!color )(?<!tono )\bcremas?\b/, CONTEXTUAL],
+  [/\b(serum|locion|exfoliante|tonico|contorno de ojos|protector solar|aftersun|fluido)\b/, CONTEXTUAL],
+  [/\bmascarilla (capilar|facial|hidratante|de arcilla)\b/, FUERTE],
+  [/\b(maquillaje|rimel|mascara de pestañas|pintalabios|barra de labios|laca de uñas|colorete|sombra de ojos|delineador)\b/, FUERTE],
+  [/\besmalte de uñas\b|\besmalte permanente\b/, FUERTE],
+  [/\b(corrector de ojeras|corrector fluido|corrector de maquillaje)\b/, FUERTE],
+  [/\b(compresa|tampon|salvaslip|copa menstrual|protegeslip|higiene intima)\w*/, FUERTE],
+  [/\b(pañal|panal|toallita|bastoncillo|discos? desmaquillante)\w*/, FUERTE],
+  [/\bgasas\b|\bgasa (esteril|hidrofil)/, FUERTE],
+  [/\balgodon (hidrofilo|magico)\b|\bdiscos? de algodon\b/, FUERTE],
+  [/\b(cepillo de dientes|cepillo dental|seda dental|hilo dental|cinta dental|irrigador|colutorio)\b/, FUERTE],
+  [/\bbrocha (de maquillaje|para polvos)\b/, FUERTE],
+  [/\bmolde de papel\b/, FUERTE],
+  [/\b(cuchillas?|maquinilla) de afeitar\b/, FUERTE],
+  [/\b(preservativo|lubricante intimo|test de embarazo|suero fisiologico|alcohol sanitario|agua oxigenada|tirita|venda|esparadrapo)\w*/, FUERTE],
+  [/\b(ibuprofeno|paracetamol|aspirina|jarabe|vitamina|complemento alimenticio|suplemento|probiotico)\b/, FUERTE],
+  [/\b(tinte|coloracion|decolorante|champu|mascarilla capilar)\b/, FUERTE],
+  [/\bmascarilla (ffp2|quirurgica|higienica)\b/, FUERTE],
+  [/\blima (de uñas|fibra)\b/, FUERTE],
+  [/\b(quitaesmalte|acetona)\b/, FUERTE],
 
-  // Bebé consumible y mascotas: entran
-  /\b(potito|papilla|leche infantil|cereales infantiles|tarrito)\w*/,
-  /\b(pienso|snack para (perro|gato)|arena (para|de) gato|lecho para gato|comida (para|de) (perro|gato|ave|pez|roedor))\b/,
-  /\b(tetina|chupete|biberon)\w*/,
+  // --- Bebé consumible y mascotas: fuerte ---------------------------------
+  [/\b(potito|papilla|leche infantil|cereales infantiles|tarrito)\w*/, FUERTE],
+  [/\b(pienso|snack para (perro|gato)|arena (para|de) gato|lecho para gato|comida (para|de) (perro|gato|ave|pez|roedor))\b/, FUERTE],
+  [/\b(tetina|chupete|biberon)\w*/, FUERTE],
 ];
 
 // Palabras que ninguna protección puede desactivar: no hay cosmético que sea una
@@ -404,16 +437,32 @@ function classify(product) {
   const deAlcance = marcaDeAlcance(product.supermercado);
   if (deAlcance) {
     const hit = normalized.match(deAlcance);
-    if (hit) return { decision: MANTENER, motivo: `protegido: marca de alcance "${hit[0]}"`, familia: null };
+    if (hit) {
+      return {
+        decision: MANTENER,
+        motivo: `protegido: marca de alcance "${hit[0]}"`,
+        familia: null,
+        nivel: FUERTE,
+      };
+    }
   }
-  for (const re of PROTECCIONES) {
+  for (const [re, nivel] of PROTECCIONES) {
     const hit = normalized.match(re);
-    if (hit) return { decision: MANTENER, motivo: `protegido: "${hit[0].trim()}"`, familia: null };
+    if (hit) {
+      return { decision: MANTENER, motivo: `protegido: "${hit[0].trim()}"`, familia: null, nivel };
+    }
   }
   // Un kilo o un litro es consumible; el bazar se vende por unidades.
   const unidad = (product.measure_unit || "").toLowerCase().trim();
   if (unidad === "kg" || unidad === "l") {
-    return { decision: MANTENER, motivo: `protegido: se vende por ${unidad}`, familia: null };
+    // El envase no dice qué es el producto: la pintura y el sustrato también se
+    // venden por litro. Nunca puede contradecir a una categoría.
+    return {
+      decision: MANTENER,
+      motivo: `protegido: se vende por ${unidad}`,
+      familia: null,
+      nivel: CONTEXTUAL,
+    };
   }
 
   // 2. Frases y especificaciones técnicas.
@@ -562,7 +611,7 @@ function decide(product) {
 
   // Evidencia positiva de que es de alcance (pilas, velas, desechables, comida,
   // limpieza, higiene...): gana a cualquier categoría.
-  if (porNombre.decision === MANTENER && porNombre.motivo) {
+  if (porNombre.decision === MANTENER && porNombre.nivel === FUERTE) {
     return { ...porNombre, via: "proteccion" };
   }
 
@@ -587,4 +636,13 @@ module.exports = {
   categoriaFueraDeAlcance,
   categoriaNoFiable,
   CATEGORIAS_FUERA_DE_ALCANCE,
-  CATEGORIAS_NO_FIABLES, MANTENER, DESCARTAR, DUDOSO, PROTECCIONES, INEQUIVOCOS, CABEZA };
+  CATEGORIAS_NO_FIABLES,
+  MANTENER,
+  DESCARTAR,
+  DUDOSO,
+  FUERTE,
+  CONTEXTUAL,
+  PROTECCIONES,
+  INEQUIVOCOS,
+  CABEZA,
+};
