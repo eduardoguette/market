@@ -416,6 +416,102 @@ test("pero no a costa de la comida", () => {
   }
 });
 
+// --- el orden de la cascada -----------------------------------------------
+
+test("una protección le gana a la categoría de la lista negra", () => {
+  // 197 packs de pilas estaban catalogados en "Bricolaje" y se borraban, aunque el
+  // usuario había decidido que las pilas se quedan. Una decisión de producto no
+  // puede depender de en qué pasillo la metió el retailer.
+  for (const caso of [
+    "Pack de 8 pilas alcalinas AA, LR06, 1,5V, DURACELL",
+    "Pack de 4 pilas recargables AA Ni-MH",
+    "Pila alcalina de petaca 9V 6LR61",
+    "Pack de 2 pilas de botón de litio CR2032",
+    "Pack de 6 pilas especiales para audífonos",
+  ]) {
+    const r = scope.decide({ supermercado: "alcampo", category: "Bricolaje", name: caso });
+    assert.strictEqual(r.decision, scope.MANTENER, `"${caso}" se borró por la categoría`);
+    assert.strictEqual(r.via, "proteccion");
+  }
+  // Y en cualquier cadena y categoría de la lista negra.
+  assert.strictEqual(
+    scope.decide({ supermercado: "bm", category: "Bazar", name: "Pila alcalina LR-6 4 unidades" }).decision,
+    scope.MANTENER
+  );
+  assert.strictEqual(
+    scope.decide({ supermercado: "alcampo", category: "Tecnología", name: "Cargador de pilas AA/AAA + 4 pilas" }).decision,
+    scope.MANTENER
+  );
+});
+
+test("la categoría sigue mandando cuando el nombre no dice nada", () => {
+  // La lista negra por categoría no se debilita: sin protección que la contradiga,
+  // decide ella, que es lo que hace que 8.214 filas se auditen como 27 reglas.
+  for (const caso of ["Taladro percutor 750W", "Juego de destornilladores 6 piezas", "Cemento rápido 5kg"]) {
+    const r = scope.decide({ supermercado: "alcampo", category: "Bricolaje", name: caso });
+    assert.strictEqual(r.decision, scope.DESCARTAR, `"${caso}" no se borró`);
+    assert.strictEqual(r.via, "categoria");
+  }
+});
+
+test("pero un DESCARTAR por nombre NO le gana a una categoría fiable y de alcance", () => {
+  // Ésta es la razón de no invertir la cascada del todo: el clasificador de
+  // nombres tiene falsos positivos, y sobre las 54.000 filas con etiqueta buena
+  // harían daño. Medido: invertir del todo mete un falso positivo en mercadona.
+  const r = scope.decide({
+    supermercado: "mercadona", category: "Menaje y conservación de alimentos", name: "Bolsa isotérmica",
+  });
+  assert.strictEqual(r.decision, scope.MANTENER);
+  assert.strictEqual(r.via, "categoria");
+  assert.strictEqual(scope.classify({ name: "Bolsa isotérmica" }).decision, scope.DESCARTAR);
+});
+
+test("las demás protecciones también cruzan la frontera de la categoría", () => {
+  // No es un parche para las pilas: es el orden, así que vale para todas.
+  const casos = [
+    ["Papelería", "Platos desechables de cartón, 20 unidades"],
+    ["Juguetes", "Servilletas de papel 33x33cm 20 uds"],
+    ["Textil", "Vela perfumada de vainilla"],
+    ["Electrodomésticos", "Croquetas de jamón 500g"],
+    ["Bricolaje", "Detergente para lavadora 40 lavados"],
+  ];
+  for (const [category, name] of casos) {
+    const r = scope.decide({ supermercado: "alcampo", category, name });
+    assert.strictEqual(r.decision, scope.MANTENER, `"${name}" en ${category} se borró`);
+  }
+});
+
+test("las protecciones laxas se ajustaron para no rescatar bazar", () => {
+  // Al ganar a la categoría, una protección de palabra suelta rescata textil:
+  // "crema" y "gasa" son también un color y una tela.
+  for (const [category, name] of [
+    ["Textil", "Toalla de tocador color crema, 400g/m², ACTUEL"],
+    ["Textil", "Manta polar color crema 130x170cm"],
+    ["Textil", "Toalla de algodón gasa 50x100cm"],
+    ["Juguetes", "Barco de vela de madera"],
+    ["Bricolaje", "Pila de fregadero de acero inoxidable"],
+  ]) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "alcampo", category, name }).decision,
+      scope.DESCARTAR,
+      `"${name}" se rescató por una protección demasiado laxa`
+    );
+  }
+  // Y lo de verdad sigue protegido.
+  for (const [category, name] of [
+    ["Perfumeria", "Crema hidratante corporal 400ml"],
+    ["Hogar y Decoración", "Crema de manos reparadora"],
+    ["Frescos", "Crema de calabaza fresca"],
+    ["Parafarmacia", "Gasas esterilizadas de algodón hidrófilo"],
+  ]) {
+    assert.strictEqual(
+      scope.decide({ supermercado: "alcampo", category, name }).decision,
+      scope.MANTENER,
+      `"${name}" dejó de estar protegido`
+    );
+  }
+});
+
 test("mascotas y limpieza NO están en la lista negra de categorías", () => {
   // Se incluyen en el alcance a propósito: el usuario las quiere dentro.
   assert.ok(!scope.categoriaFueraDeAlcance("alcampo", "Mascotas"));

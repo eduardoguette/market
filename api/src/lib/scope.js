@@ -84,7 +84,7 @@ const PROTECCIONES = [
   // cadenas. Con sinónimos, porque un tealight es una vela y no lleva la palabra:
   // ése fue el agujero, una lista de términos incompleta, el mismo fallo que los
   // plurales. "portavelas" y "posavelas" quedan fuera a propósito: son soportes.
-  /\b(vela|tealight|candelita|lamparilla)\w*\b/,
+  /(?<!barco de )(?<!tabla de )\b(vela|tealight|candelita|lamparilla)\w*\b/,
 
   // Consumibles de hogar de la familia de la pila y la bombilla. Criterio amplio,
   // coherente con dejar las velas: mercadona tiene "Pilas y bolsas de basura" y
@@ -95,7 +95,7 @@ const PROTECCIONES = [
   // sólo se protege el de pilas; y de la iluminación se protege la lámpara suelta
   // ("luz solar") pero no lo que lleva luces incorporadas, que puede ser un juguete.
   /\bbo(m)?billas?\b(?![^]*\b(h[0-9]|hb[0-9]|xenon|halogeno)\b)/,
-  /\bpilas?\b/,
+  /\bpilas?\b(?! de (fregadero|lavadero|obra))/,
   /\bcargador de pilas\b/,
   /\b(luz solar|linterna|farolillo)\b/,
 
@@ -110,10 +110,16 @@ const PROTECCIONES = [
   // Cuidado personal y parafarmacia: entran
   /\b(champu|acondicionador|gel de baño|gel de ducha|gel de manos|jabon|pasta de dientes|dentifrico|colutorio|enjuague bucal)\b/,
   /\b(desodorante|antitranspirante|colonia|perfume|eau de (toilette|parfum)|after ?shave|espuma de afeitar)\b/,
-  /\b(crema|serum|locion|mascarilla|exfoliante|tonico|contorno de ojos|protector solar|aftersun|fluido)\b/,
+  // "crema" tambien es un color de textil ("toalla color crema"), y desde que la
+  // proteccion gana a la categoria eso rescataba toallas y mantas.
+  /(?<!color )(?<!tono )\bcremas?\b/,
+  /\b(serum|locion|mascarilla|exfoliante|tonico|contorno de ojos|protector solar|aftersun|fluido)\b/,
   /\b(maquillaje|rimel|mascara de pestañas|pintalabios|barra de labios|esmalte|laca de uñas|corrector|colorete|sombra de ojos|delineador)\b/,
   /\b(compresa|tampon|salvaslip|copa menstrual|protegeslip|higiene intima)\w*/,
-  /\b(pañal|panal|toallita|bastoncillo|discos? desmaquillante|gasa)\w*/,
+  /\b(pañal|panal|toallita|bastoncillo|discos? desmaquillante)\w*/,
+  // La gasa sanitaria va en plural o dice esteril; "algodon gasa" es una tela,
+  // y protegerla rescataba toallas ahora que la proteccion gana a la categoria.
+  /\bgasas\b|\bgasa (esteril|hidrofil)/,
   /\balgodon (hidrofilo|magico)\b|\bdiscos? de algodon\b/,
   /\b(cepillo de dientes|cepillo dental|seda dental|hilo dental|cinta dental|irrigador|colutorio)\b/,
   /\bbrocha (de maquillaje|para polvos)\b/,
@@ -532,10 +538,34 @@ function categoriaNoFiable(supermercado, category) {
   return Boolean(set && set.has(category));
 }
 
-// Decisión completa: primero la categoría cuando es fiable, y sólo si no lo es se
-// mira el nombre. Así la inferencia por nombre no se aplica donde ya hay una
-// etiqueta buena, que sería cambiar un dato cierto por una conjetura.
+// Decisión completa.
+//
+// El orden importa y costó tres rondas acertarlo. Lo que manda es esto: una
+// protección es evidencia POSITIVA de que el producto es de alcance, y eso tiene
+// que ganarle a la etiqueta que le puso el retailer. Si no, una decisión explícita
+// del usuario acaba dependiendo de en qué pasillo metió la cadena el producto:
+// 197 packs de pilas alcalinas se borraban por estar catalogados en "Bricolaje",
+// aunque el usuario había dicho que las pilas se quedan.
+//
+// Pero sólo cruza esa frontera la evidencia positiva, no toda la clasificación por
+// nombre. Un DESCARTAR por nombre NO puede ganarle a una categoría fiable y de
+// alcance, porque el clasificador de nombres tiene falsos positivos y ahí es donde
+// harían daño: sobre las 54.000 filas que hoy están protegidas por tener una
+// etiqueta buena. Medido, invertir la cascada del todo mete un falso positivo en
+// las cadenas limpias ("Bolsa isotérmica" de mercadona, catalogada en "Menaje y
+// conservación de alimentos"), y con la cascada así hay cero.
+//
+// Resumen: la protección gana siempre; el resto del nombre sólo decide donde la
+// etiqueta no es de fiar.
 function decide(product) {
+  const porNombre = classify(product);
+
+  // Evidencia positiva de que es de alcance (pilas, velas, desechables, comida,
+  // limpieza, higiene...): gana a cualquier categoría.
+  if (porNombre.decision === MANTENER && porNombre.motivo) {
+    return { ...porNombre, via: "proteccion" };
+  }
+
   if (categoriaFueraDeAlcance(product.supermercado, product.category)) {
     return {
       decision: DESCARTAR,
@@ -545,9 +575,9 @@ function decide(product) {
     };
   }
   if (categoriaNoFiable(product.supermercado, product.category)) {
-    return { ...classify(product), via: "nombre" };
+    return { ...porNombre, via: "nombre" };
   }
-  // Categoría fiable y de alcance: se queda, sin mirar el nombre.
+  // Categoría fiable y de alcance: se queda, sin dejar que el nombre la contradiga.
   return { decision: MANTENER, motivo: null, familia: null, via: "categoria" };
 }
 

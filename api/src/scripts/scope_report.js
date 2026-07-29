@@ -108,6 +108,25 @@ function main() {
   escribir("dudosos.csv", toCsv(dudosos, columnas));
   escribir("reglas_por_categoria.csv", toCsv(reglas, ["supermercado", "categoria", "tipo", "productos"]));
 
+  // Los que se salvan por protección estando en una categoría de la lista negra:
+  // es la parte que hay que auditar cuando se cambia una protección, porque son
+  // los casos donde una decisión de producto contradice a la etiqueta del retailer.
+  const rescatados = [];
+  for (const product of products) {
+    const veredicto = scope.decide(product);
+    if (veredicto.via !== "proteccion") continue;
+    if (!scope.categoriaFueraDeAlcance(product.supermercado, product.category)) continue;
+    rescatados.push({
+      id: product.id, supermercado: product.supermercado, name: product.name,
+      category: product.category, price_eur: product.price_eur, razon: veredicto.motivo,
+    });
+  }
+  escribir("rescatados_por_proteccion.json", JSON.stringify(rescatados, null, 2));
+  escribir(
+    "rescatados_por_proteccion.csv",
+    toCsv(rescatados, ["id", "supermercado", "name", "category", "price_eur", "razon"])
+  );
+
   const resumen = {
     total_analizado: products.length,
     a_borrar_bazar_identificado: bazar.length,
@@ -123,6 +142,7 @@ function main() {
   console.log(`  bazar identificado (candidatos a borrar): ${bazar.length}`);
   console.log(`  dudosos (NO borrar, decide una persona):  ${dudosos.length}`);
   console.log(`  se mantienen:                             ${mantenidos}`);
+  console.log(`  rescatados por protección sobre categoría: ${rescatados.length}  <- auditar esta lista`);
   console.log(`  ficheros en ${path.resolve(outDir)}`);
 }
 
