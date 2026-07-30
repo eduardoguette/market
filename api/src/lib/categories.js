@@ -241,7 +241,14 @@ const POR_PALABRA = [
   [/aceite|vinagre|sal\b|especia|sazonador|salsa|conserva|caldo|sopa|crema de verdura|harina|levadura|tomate frito|mayonesa|ketchup|mostaza|condimento|despensa|alimentacion|cocina mejicana|cocina oriental|cocina italiana|sabores de|nutricion deportiva|proteina|dietetic|esparrago|palmito|alcachofa|pimiento|maiz dulce|guarnicion/i, "despensa"],
 
   [/papel higienic|papel de cocina|servilleta|panuelo|celulosa|film|aluminio|bolsa de basura|desechable|vajilla desechable/i, "papel_desechables"],
-  [/calcetin|media\b|medias\b|ropa|textil|prenda|complemento|accesorio(s)? y complemento/i, FUERA_DE_ALCANCE],
+  // Los químicos de lavandería van ANTES que el textil: "Detergente ropa",
+  // "Suavizante ropa" y "Perfumador ropa" se consumen, no se visten. Sin esta regla
+  // la de abajo se los llevaba fuera del catálogo con la prenda.
+  [/detergente|suavizante|quitamancha|perfumador ropa|blanqueante|percarbonato|antical/i, "limpieza_drogueria"],
+  // \bropa\b y no `ropa`: sin anclar, el patrón se lleva por delante "estROPAjo", y
+  // con él bayetas y guantes, que entran por su categoría ("Estropajo, bayeta y
+  // guantes"). Eran 97 productos de limpieza tirados fuera del catálogo.
+  [/calcetin|media\b|medias\b|\bropa\b|textil|prenda|complemento|accesorio(s)? y complemento/i, FUERA_DE_ALCANCE],
   [/pila|bombilla|iluminacion|linterna/i, "pilas_iluminacion"],
   [/limpieza|limpiador|detergente|lejia|suavizante|friegasuelo|lavavajilla|estropajo|fregona|bayeta|ambientador|insecticida|drogueri|quitamancha|abrillantador|hogar/i, "limpieza_drogueria"],
 
