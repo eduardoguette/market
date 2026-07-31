@@ -191,7 +191,7 @@ const POR_PALABRA = [
   // Marcas usadas como sección.
   [/^(mondelez|pepsico|nestle|danone|coca.?cola|unilever|procter|henkel|loreal|l.oreal)$/i, NO_FIABLE],
   // Etiquetas que son un atributo y no un pasillo.
-  [/^(sin gluten|sin lactosa|bio|eco|ecologico|integral|light|zero|envasado|al corte|granel|seco|humedo|marcas|varios|otros|resto|surtido|novedades|destacados)$/i, NO_FIABLE],
+  [/^(sin gluten|sin lactosa|sin azucar|sin azucares|bio|eco|ecologico|integral|light|zero|envasado|al corte|granel|seco|humedo|marcas|varios|otros|resto|surtido|novedades|destacados)$/i, NO_FIABLE],
 
   // `tarrito` va con `potito`: las seis etiquetas del catálogo que lo usan son
   // comida de bebé ("Tarritos de fruta y postre", "de verduras", "de carne", "de
@@ -200,9 +200,10 @@ const POR_PALABRA = [
   [/panal|bebe|infantil|potito|tarrito|papilla|chupete|biberon|puericultura/i, "bebe"],
   [/mascota|perro|gato|pienso|felino|canino|roedor|pajaro|acuario/i, "mascotas"],
 
-  [/cerveza|vino|licor|whisky|ginebra|ron|vodka|sidra|cava|champan|vermut|espumoso|alcohol|destilado|aperitivo con alcohol/i, "bebidas_alcohol"],
+  [/vinagre/i, "despensa"],
+  [/cerveza|vino|licor|whisky|ginebra|\bron(?:es)?\b|vodka|sidra|cava|champan|vermut|espumoso|alcohol|destilado|aperitivo con alcohol/i, "bebidas_alcohol"],
   [/cafe|cacao|infusion|te e |^te$|capsula|molido|soluble|descafeinado/i, "cafe_te"],
-  [/refresco|agua|zumo|smoothie|isotonic|energetic|bebida vegetal|nectar|horchata|gaseosa|cola\b|tonica|limonada|^bebidas?$|bebidas sin/i, "bebidas"],
+  [/refresco|\baguas?\b|zumo|smoothie|isotonic|energetic|bebida vegetal|nectar|horchata|gaseosa|cola\b|tonica|limonada|^bebidas?$|bebidas sin/i, "bebidas"],
 
   [/helado|congelad|ultracongelad/i, "congelados"],
   [/platos? preparados?|precocinad|pizza|lasana|canelon|croqueta|empanad|rebozad|tortilla|sushi|kebab|comida preparada|listo para|quinta gama/i, "platos_preparados"],
@@ -227,7 +228,9 @@ const POR_PALABRA = [
   [/queso|mozzarella|parmesano|manchego|brie|camembert|roquefort|burgos|mascarpone|requeson/i, "charcuteria_quesos"],
   // El chocolate va antes que la leche: "Chocolate con leche" es chocolate, y con
   // el orden inverso caia en lacteos. Lo distintivo manda sobre lo generico.
-  [/chocolate|bombon|caramelo|gominola|golosina|regaliz|chicle|turron|chocolatina|dulce|azucar|miel|mermelada|crema de cacao|snack dulce/i, "dulces_chocolate"],
+  [/galleta|cereales|muesli|granola/i, "cereales_galletas"],
+  [/bollos?\b|berlina|palmera|donut|rosquilla|roscon/i, "panaderia_bolleria"],
+  [/chocolate|bombon|caramelo|gominola|golosina|regaliz|chicle|turron|chocolatina|dulce|(?<!sin )\bazucar\b|miel|mermelada|crema de cacao|snack dulce/i, "dulces_chocolate"],
   [/leche|yogur|yogurt|kefir|nata|mantequilla|margarina|huevo|lacte|cuajada|natilla|flan|postre lacteo|batido lacteo|quark/i, "lacteos_huevos"],
 
   // Los frutos secos van ANTES que la fruta por el mismo motivo que el chocolate va
@@ -290,11 +293,17 @@ const POR_PALABRA = [
   // con él bayetas y guantes, que entran por su categoría ("Estropajo, bayeta y
   // guantes"). Eran 97 productos de limpieza tirados fuera del catálogo.
   [/calcetin|media\b|medias\b|\bropa\b|textil|prenda|complemento|accesorio(s)? y complemento/i, FUERA_DE_ALCANCE],
-  [/pila|bombilla|iluminacion|linterna/i, "pilas_iluminacion"],
+  // El carbón y los utensilios de barbacoa son bazar. Aparecen acá porque al
+  // anclar "barba" dejaron de irse a cosmética, y sin esta línea quedarían sin
+  // cajón: se declaran fuera de alcance, que es lo que son.
+  [/carbon (vegetal|para barbacoa)|articulos barbacoa|palos barbacoa|pastillas de encendido/i, FUERA_DE_ALCANCE],
+  [/\bpilas?\b|bombilla|iluminacion|linterna/i, "pilas_iluminacion"],
+  [/limpie(za|dora)s? facial|limpiador(es|as)? facial|desmaquillante/i, "cosmetica_perfumeria"],
+  [/limpieza (de )?dentadura|spray bucal|hilo dental|higiene bucal/i, "higiene_personal"],
   [/limpieza|limpiador|detergente|lejia|suavizante|friegasuelo|lavavajilla|estropajo|fregona|bayeta|ambientador|insecticida|drogueri|quitamancha|abrillantador|hogar/i, "limpieza_drogueria"],
 
   [/parafarmacia|botiquin|farmacia|salud|vitamina|suplemento|tirita|termometro|preservativo|test de/i, "parafarmacia"],
-  [/perfume|colonia|maquillaje|coloracion|tinte|labios|ojos|manicura|pedicura|esmalte|cosmetic|crema facial|crema corporal|serum|mascarilla facial|depilaci|afeitad|barba|mascarilla|locion|hidratante|colorete|polvos|solar|aftersun|uñas|unas\b|pelo/i, "cosmetica_perfumeria"],
+  [/perfume|colonia|maquillaje|coloracion|tinte|labios|ojos|manicura|pedicura|esmalte|cosmetic|crema facial|crema corporal|serum|mascarilla facial|depilaci|afeitad|\bbarbas?\b|mascarilla|locion|hidratante|colorete|polvos|solar|aftersun|uñas|unas\b|pelo/i, "cosmetica_perfumeria"],
   [/higiene|champu|acondicionador|gel de bano|gel de ducha|jabon|dentifric|bucal|desodorante|compresa|tampon|intima|panuelo|cuidado personal|cabello|capilar|corporal/i, "higiene_personal"],
 ];
 
@@ -519,6 +528,68 @@ const PASILLOS_POR_PALABRA = {
     // ahorramás 1). Fusionarlo esconderría seis productos de cordero en el pasillo del
     // conejo. Se quedan como dos filas porque son dos pasillos.
     [palabras("ave", "pollo", "pavo"), "Aves y pollo"],
+  ],
+
+  // Droguería es el cajón con más filas del catálogo (97) y el reparto es el de
+  // siempre: cuatro familias de verdad -- lavandería, limpiadores de superficie,
+  // utensilios e insecticidas/ambientadores -- escritas de veinte formas entre seis
+  // cadenas. El eje que se respeta es PARA QUÉ sirve el producto, que es lo que el
+  // usuario busca; el que no, cómo lo redacta cada tienda.
+  limpieza_drogueria: [
+    // Las etiquetas que sólo dicen "esto es limpieza" son el cajón entero, no un
+    // pasillo: se pliegan a su nombre igual que los departamentos.
+    [/^limpieza$|^hogar$|^limpiadores especificos$|^drogueria$/i, "Limpieza y droguería"],
+    // Utensilios primero: "Estropajo, bayeta y guantes" lleva la palabra "limpieza"
+    // en varias cadenas y la regla de limpiadores se lo llevaría.
+    [palabras("fregona", "cubo", "mopa", "escoba", "recogedor"), "Fregonas, cubos y escobas"],
+    [palabras("estropajo", "bayeta", "gamuza", "pano", "guante", "esponja"), "Estropajos, bayetas y guantes"],
+    [/utensilio/i, "Utensilios de limpieza"],
+    // Lavandería. "Máquina líquido", "Concentrado" y "A mano concentrado" son hojas de
+    // bm sin su rama: se reconocen acá porque dentro de este cajón sólo pueden ser
+    // detergente, y su nombre de producto ya lo confirmó al asignar el cajón.
+    [palabras("quitamancha", "blanqueador", "percarbonato"), "Quitamanchas y blanqueadores"],
+    [/\blejia\b|amoniaco|salfuman|liquidos fuertes|desinfectante/i, "Lejía y desinfectantes"],
+    [palabras("detergente", "suavizante", "acondicionador", "maquina liquido", "maquina polvo", "concentrado", "perfumador"), "Detergente y suavizante"],
+    // Insecticidas y ambientadores. El insecticida va antes: "Insecticida y
+    // ambientador" (74) es el pasillo de los insecticidas.
+    [palabras("insecticida", "antipolilla", "raticida"), "Insecticidas"],
+    [palabras("ambientador", "electrico y automatico", "decorativo"), "Ambientadores"],
+    // Limpiadores por superficie.
+    [palabras("lavavajilla", "vajilla"), "Lavavajillas"],
+    [/bano|\bwc\b|inodoro/i, "Limpieza de baño y WC"],
+    [/cristal|espejo|metal|mueble/i, "Limpieza de cristales y muebles"],
+    [/cocina/i, "Limpieza de cocina"],
+    [/suelo|friegasuelo|limpiahogar|multiuso|betun|calzado/i, "Limpiahogar y multiusos"],
+  ],
+
+  // Alcohol: se respeta el TIPO de bebida, que es exactamente lo que el usuario elige
+  // (nadie busca "vino" cuando quiere ginebra), y se fusiona la redacción. Dos cosas
+  // que NO se fusionan a propósito: "Cerveza sin alcohol" se queda aparte de
+  // "Cerveza" -- misma distinción real que "Agua con gas"/"Agua sin gas", que este
+  // archivo ya se niega a fusionar --, y el vino tinto, blanco y rosado siguen siendo
+  // tres filas.
+  bebidas_alcohol: [
+    // Las dos filas que sólo dicen "lleva alcohol" son el cajón entero.
+    [/^(bebidas alcoholicas|con alcohol|alcoholes)$/i, "Cerveza, vino y licores"],
+    [/sin alcohol|\b0[,.]0\b|desalcoholizad/i, "Cerveza y vino sin alcohol"],
+    [palabras("tinto de verano", "sangria"), "Tinto de verano y sangría"],
+    [palabras("vino tinto", "tinto"), "Vino tinto"],
+    [palabras("vino blanco", "blanco"), "Vino blanco"],
+    [palabras("vino rosado", "rosado"), "Vino rosado"],
+    // Las denominaciones de origen y las marcas usadas como pasillo no son un tipo de
+    // bebida: dentro de este cajón son vino, y su fila propia no dice nada.
+    [/^do |denominacion de origen|valdepenas|la mancha|rioja|ribera|rueda|pernod|diageo/i, "Vino"],
+    [palabras("vino", "mosto"), "Vino"],
+    [palabras("cerveza"), "Cerveza"],
+    [palabras("cava", "champan", "champagne", "espumoso", "lambrusco"), "Cava y espumosos"],
+    [palabras("sidra"), "Sidra"],
+    [palabras("vermut", "aperitivo"), "Vermuts y aperitivos"],
+    [palabras("whisky", "bourbon"), "Whisky"],
+    [palabras("ginebra", "gin tonic"), "Ginebra"],
+    [/\bron(?:es)?\b/i, "Ron"],
+    [palabras("vodka"), "Vodka"],
+    [palabras("brandy", "cognac", "conac", "orujo", "pacharan"), "Brandy y licores de orujo"],
+    [palabras("licor", "crema", "tequila", "destilado"), "Licores"],
   ],
 
   // La galleta y el cereal se escriben de trece formas entre seis cadenas. Se fusiona
@@ -1110,7 +1181,7 @@ const POR_NOMBRE = [
     "secreto iberico", "secreto de cerdo", "presa iberica", "magro", "jarrete", "morcillo", "rabo", "callos", "higado",
     "molleja", "paletilla", "carne picada", "carne de vacuno", "carne de ternera",
     "carne de cerdo", "carne de buey", "carne mechada", "adobado", "adobada", "duroc", "angus",
-    "churrasco"
+    "churrasco", "picana", "picanha"
   ), "carne"],
 
   // Horno, bollería y pastelería. Es el obrador de la tienda y en alcampo pesa:
@@ -1353,7 +1424,7 @@ const POR_NOMBRE = [
   // charcutería, la despensa y la higiene. Lo que llega hasta acá con la palabra
   // "crema" es un cosmético.
   [palabras(
-    "crema facial", "crema corporal", "crema de manos", "crema de dia",
+    "crema facial", "fluido facial", "crema corporal", "crema de manos", "crema de dia",
     "crema de noche", "crema antiarrugas", "contorno de ojos", "serum",
     "exfoliante", "tonico facial", "protector solar", "proteccion solar",
     "aftersun", "after sun", "mascarilla facial", "mascarilla capilar",

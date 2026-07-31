@@ -267,6 +267,74 @@ test("\"Cerdo y cochinillo\" es el mismo pasillo que \"Cerdo\"", () => {
   );
 });
 
+test("una subcadena suelta en POR_PALABRA se lleva la fila entera de cajón", () => {
+  // Cinco palabras de POR_PALABRA viven dentro de otra palabra que significa algo
+  // distinto. Medido contra las 1.371 etiquetas reales: 222 productos en el cajón
+  // equivocado, y es el error que se ve más raro porque la fila entera está fuera de
+  // sitio ("Barbacoa" dentro de cosmética y perfumería).
+  const r = (supermercado, category, name) =>
+    categorias.resolve({ supermercado, category, name }).canonical;
+  // "ron" dentro de macarRONes, chipiRONes, turRONes, autobRONceadores.
+  assert.strictEqual(r("bm", "Macarrones", "Macarrones hélices 3 minutos 400 g"), "pasta_arroz_legumbres");
+  assert.strictEqual(r("ahorramas", "Turrones", "Turrón duro 300 g"), "dulces_chocolate");
+  // ...y el ron de verdad sigue entrando, en singular y en plural.
+  assert.strictEqual(r("bm", "Ron", "Ron añejo 0,7 l"), "bebidas_alcohol");
+  assert.strictEqual(r("bm", "Rones", "Ron añejo 0,7 l"), "bebidas_alcohol");
+  // "pila" dentro de dePILAción, caPILAres, dePILAtoria.
+  assert.strictEqual(r("mercadona", "Depilación", "Banda de cera depilatoria facial"), "cosmetica_perfumeria");
+  assert.strictEqual(r("bm", "Pilas", "Pila alcalina AA 4 unidades"), "pilas_iluminacion");
+  // "barba" dentro de BARBAcoa.
+  assert.strictEqual(r("ahorramas", "Barbacoa", "Secreto de cerdo"), "carne");
+  // "agua" dentro de AGUAcate.
+  assert.strictEqual(r("bm", "Piña, aguacate, kiwi y tropicales", "Piña Selecta unidad"), "frutas_verduras");
+  assert.strictEqual(r("dia", "Agua y refrescos", "Agua mineral 1,5 l"), "bebidas");
+  // "azucar" dentro de azucarADO, y el reclamo "sin azúcar".
+  assert.strictEqual(r("bm", "Yogur natural y azucarado", "Yogur natural 8x125 g"), "lacteos_huevos");
+  assert.strictEqual(r("ahorramas", "Galletas sin azúcar", "Galleta dorada al horno"), "cereales_galletas");
+  // El vinagre de vino no es vino.
+  assert.strictEqual(r("ahorramas", "Vinagre de vino y de Jerez", "Vinagre de Jerez 250 ml"), "despensa");
+  // Y la galleta, el cereal y el bollo mandan sobre el chocolate que llevan encima.
+  assert.strictEqual(r("bm", "Galletas de chocolate y rellenas", "Galleta con chocolate 300 g"), "cereales_galletas");
+  assert.strictEqual(r("bm", "Bollos chocolate, palmeras y donuts", "Soles chocolate 3 uds"), "panaderia_bolleria");
+  // La limpieza facial es cosmética y la bucal es higiene, no droguería.
+  assert.strictEqual(r("bm", "Limpieza facial y desmaquillantes", "Desmaquillante de ojos 100 ml"), "cosmetica_perfumeria");
+  assert.strictEqual(r("bm", "Limpieza dentaduras postizas, spray bucal e hilo dental", "Hilo dental 50 m"), "higiene_personal");
+});
+
+test("droguería y alcohol: se fusiona la redacción, no el uso ni el tipo", () => {
+  const l = (n) => categorias.nombrePasillo(n, "limpieza_drogueria");
+  assert.strictEqual(l("Máquina líquido"), "Detergente y suavizante");
+  assert.strictEqual(l("A mano concentrado"), "Detergente y suavizante");
+  assert.strictEqual(l("Estropajo, bayeta y guantes"), "Estropajos, bayetas y guantes");
+  assert.strictEqual(l("Bayetas y gamuzas"), "Estropajos, bayetas y guantes");
+  assert.strictEqual(l("Limpiahogar y friegasuelos"), "Limpiahogar y multiusos");
+  // "Insecticida y ambientador" es el pasillo de los insecticidas: el insecticida
+  // decide antes que el ambientador.
+  assert.strictEqual(l("Insecticida y ambientador"), "Insecticidas");
+  assert.strictEqual(l("Otros ambientadores"), "Ambientadores");
+  // Y las etiquetas que sólo dicen "esto es limpieza" son el cajón entero.
+  assert.strictEqual(l("Limpieza"), "Limpieza y droguería");
+
+  const a = (n) => categorias.nombrePasillo(n, "bebidas_alcohol");
+  assert.strictEqual(a("Otros vinos tinto"), "Vino tinto");
+  assert.strictEqual(a("DO Valdepeñas y La Mancha"), "Vino");
+  assert.strictEqual(a("Whisky y bourbon"), "Whisky");
+  assert.strictEqual(a("Brandy y cognac"), "Brandy y licores de orujo");
+  assert.strictEqual(a("Bebidas alcohólicas"), "Cerveza, vino y licores");
+  // La cerveza sin alcohol NO se fusiona con la cerveza, igual que "Agua con gas"
+  // no se fusiona con "Agua sin gas".
+  assert.strictEqual(a("Cerveza sin alcohol"), "Cerveza y vino sin alcohol");
+  assert.notStrictEqual(
+    categorias.clavePasillo("Cerveza sin alcohol", "bebidas_alcohol"),
+    categorias.clavePasillo("Cerveza", "bebidas_alcohol")
+  );
+  // Y el tinto, el blanco y el rosado siguen siendo tres filas.
+  assert.notStrictEqual(
+    categorias.clavePasillo("Vino tinto", "bebidas_alcohol"),
+    categorias.clavePasillo("Vino blanco", "bebidas_alcohol")
+  );
+});
+
 // --- fusión de pasillos: aves, conejo, panadería y cereales ---------------
 
 test("el nombre de un DEPARTAMENTO no es un nombre de pasillo", () => {
@@ -450,7 +518,8 @@ test("la fusión por palabra clave NO se aplica sin declarar el cajón", () => {
   // por "ajo" dentro de "estropAJO") al pasillo de las verduras.
   assert.strictEqual(categorias.nombrePasillo("Refresco de naranja y de limón", "bebidas"), null);
   assert.strictEqual(categorias.nombrePasillo("Yogures con frutas y sabores", "lacteos_huevos"), null);
-  assert.strictEqual(categorias.nombrePasillo("Estropajo, bayeta y guantes", "limpieza_drogueria"), null);
+  assert.strictEqual(categorias.nombrePasillo("Estropajo, bayeta y guantes", FV), null);
+  assert.strictEqual(categorias.nombrePasillo("Ajo, perejil y orégano", FV), null);
   assert.strictEqual(categorias.nombrePasillo("Tomate", undefined), null);
 });
 
