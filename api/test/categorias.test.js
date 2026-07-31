@@ -119,10 +119,9 @@ test("el departamento cae a su cajón por defecto, no a null", () => {
   // La pasada es segura por construcción: lo que las reglas de nombre no
   // reconocen se queda donde está hoy. Si cayera a null, el cambio dejaría 2.889
   // productos fuera de la navegación, que es peor que el bug.
-  const r = enFrescos("alcampo", "Melón Waikiki al peso.");
+  const r = enFrescos("alcampo", "Zurracapote de la casa al peso.");
   assert.strictEqual(r.canonical, "frutas_verduras");
   assert.strictEqual(r.source, "category");
-  assert.strictEqual(enFrescos("ahorramas", "Gazpacho Don Simón 1l").canonical, "frutas_verduras");
 });
 
 test("las reglas de nombre no se pueden escribir como las de etiqueta", () => {
@@ -154,10 +153,117 @@ test("el plural no se escapa de las reglas de nombre", () => {
 });
 
 test("el departamento sólo aplica a las cadenas declaradas", () => {
-  // mercadona no tiene "Frescos"; si un día lo trae, hay que declararlo.
+  // mercadona no tiene "Frescos". Lo que cambia sin declararlo es el CAJÓN POR
+  // DEFECTO: sin departamento, un nombre que ninguna regla reconoce queda sin
+  // cajón en vez de caer en frutas y verduras.
+  const desconocido = categorias.resolve({
+    supermercado: "mercadona", category: "Frescos", name: "Zurracapote de la casa",
+  });
+  assert.strictEqual(desconocido.canonical, null);
+  // El nombre sí sigue decidiendo, por la pasada de respaldo, y así se declara.
+  const queso = categorias.resolve({ supermercado: "mercadona", category: "Frescos", name: "Queso" });
+  assert.strictEqual(queso.canonical, "charcuteria_quesos");
+  assert.strictEqual(queso.source, "name");
+});
+
+// --- quinta pasada: el nombre cuando la etiqueta no dice nada --------------
+
+test("una hoja sin rama la resuelve el nombre del producto", () => {
+  // El agujero más grande del mapa: bm captura la hoja SIN su rama, y una hoja así
+  // no se puede resolver por su texto porque no dice de qué habla. Eran 1.919
+  // productos de bm y 666 de ahorramás sin cajón.
+  const porNombre = (supermercado, category, name) =>
+    categorias.resolve({ supermercado, category, name });
+  assert.strictEqual(porNombre("bm", "Secas", "Alubia blanca larga 1 kg").canonical, "pasta_arroz_legumbres");
+  assert.strictEqual(porNombre("bm", "Lonchas", "Queso en lonchas 8 unidades 150 g").canonical, "charcuteria_quesos");
+  assert.strictEqual(porNombre("bm", "Oveja", "Queso de oveja al corte").canonical, "charcuteria_quesos");
+  assert.strictEqual(porNombre("bm", "Máquina líquido", "Detergente líquido ropa delicada 50 lavados").canonical, "limpieza_drogueria");
+  assert.strictEqual(porNombre("bm", "Rostro", "Maquillaje Nude finish Natural tono medio").canonical, "cosmetica_perfumeria");
+  assert.strictEqual(porNombre("bm", "Antiarrugas y antiedad", "Crema facial antiarrugas de día 50 ml").canonical, "cosmetica_perfumeria");
+  assert.strictEqual(porNombre("bm", "Pérdidas de orina", "Compresa pérdidas normal 14 unidades").canonical, "higiene_personal");
+  assert.strictEqual(porNombre("bm", "Tarrinas", "Helado de crema de cacao y avellana tarrina 470 ml").canonical, "congelados");
+  assert.strictEqual(porNombre("bm", "Natural", "Café natural molido puro sabor 250 g").canonical, "cafe_te");
+  assert.strictEqual(porNombre("bm", "Té frío", "Kombucha piña colada 250 ml").canonical, "bebidas");
+  assert.strictEqual(porNombre("ahorramas", "Colgate", "Pasta de dientes Colgate Triple Action").canonical, "higiene_personal");
+  assert.strictEqual(porNombre("mercadona", "Velas y decoración", "Vela de cumpleaños 0 Hacendado").canonical, "pilas_iluminacion");
+  // La garantía: la pasada sólo se ejecuta sobre lo que hoy NO tiene cajón, así que
+  // una etiqueta que sí resuelve sigue mandando ella aunque el nombre diga otra cosa.
   assert.strictEqual(
-    categorias.resolve({ supermercado: "mercadona", category: "Frescos", name: "Queso" }).canonical,
-    null
+    categorias.resolve({ supermercado: "dia", category: "Quesos", name: "Detergente" }).canonical,
+    "charcuteria_quesos"
+  );
+});
+
+// --- las raíces gruesas de alcampo son departamentos ----------------------
+
+test("las raíces gruesas de alcampo las decide el nombre, no la etiqueta", () => {
+  const en = (category, name) => categorias.resolve({ supermercado: "alcampo", category, name });
+  // "Bebidas" metía ~1.100 botellas de alcohol en el cajón del agua mineral.
+  assert.strictEqual(en("Bebidas", "MONTECILLO Vino tinto reserva con D.O. Ca. Rioja botella 75 cl.").canonical, "bebidas_alcohol");
+  assert.strictEqual(en("Bebidas", "MAHOU 5 ESTRELLAS Cervezas pack 28 latas x 33 cl.").canonical, "bebidas_alcohol");
+  assert.strictEqual(en("Bebidas", "FONT VELLA Agua mineral botella de 1,5 l.").canonical, "bebidas");
+  // "Alimentación" era la despensa entera, pasta y aperitivos incluidos.
+  assert.strictEqual(en("Alimentación", "GALLO Nº 5  Pasta fideos 450 g.").canonical, "pasta_arroz_legumbres");
+  assert.strictEqual(en("Alimentación", "GREFUSA Pipas de girasol 200 g.").canonical, "snacks");
+  assert.strictEqual(en("Alimentación", "COOSUR  Aceite de oliva virgen extra 5 l.").canonical, "despensa");
+  // "Desayuno y Merienda" tenía 708 chocolates y 384 cafés dentro de los cereales.
+  assert.strictEqual(en("Desayuno y Merienda", "LINDT Chocolate con leche y avellanas enteras 300 g.").canonical, "dulces_chocolate");
+  assert.strictEqual(en("Desayuno y Merienda", "MARCILLA Café en cápsulas descafeinado Gran Aroma 28 uds.").canonical, "cafe_te");
+  assert.strictEqual(en("Desayuno y Merienda", "GULLÓN Galletas integrales con avena y naranja 425 g.").canonical, "cereales_galletas");
+  // "Droguería" mezclaba el papel higiénico con los detergentes.
+  assert.strictEqual(en("Droguería", "SCOTTEX Pañuelos de papel de 3 capas 15 uds.").canonical, "papel_desechables");
+  assert.strictEqual(en("Droguería", "ARIEL Detergente en cápsulas original 22 DS").canonical, "limpieza_drogueria");
+  // Y el defecto sigue siendo el cajón que tenían: lo no reconocido no se mueve.
+  const raro = en("Alimentación", "Zurracapote de la casa");
+  assert.strictEqual(raro.canonical, "despensa");
+  assert.strictEqual(raro.source, "category");
+});
+
+test("las palabras que engañan a las reglas de nombre del resto del súper", () => {
+  const en = (supermercado, category, name) => categorias.resolve({ supermercado, category, name });
+  // Cada una es un falso positivo medido contra el catálogo real.
+  // "cortado" es el café Y el corte de la charcutería: 231 jamones al pasillo del café.
+  assert.strictEqual(en("alcampo", "Frescos", "CAMPOFRÍO Jamón cocido extra, cortado en lonchas").canonical, "charcuteria_quesos");
+  // "ron" dentro de "macarrones" no dispara, por el \b.
+  assert.strictEqual(en("alcampo", "Alimentación", "GALLO Macarrones 500 g.").canonical, "pasta_arroz_legumbres");
+  // "leche" también nombra un cosmético: 91 protectores solares en la nevera.
+  assert.strictEqual(en("alcampo", "Perfumeria", "NIVEA Sun Leche solar protectora con FPS 30").canonical, "cosmetica_perfumeria");
+  // "agua" micelar no es agua de beber; "aceite" capilar no es aceite de oliva.
+  assert.strictEqual(en("alcampo", "Perfumeria", "NIVEA Micell air Agua micelar desmaquilladora 400 ml").canonical, "cosmetica_perfumeria");
+  assert.strictEqual(en("alcampo", "Perfumeria", "GLISS Aceite capilar reparador de daños 100 ml").canonical, "cosmetica_perfumeria");
+  // "pasta" de dientes no es pasta alimenticia.
+  assert.strictEqual(en("alcampo", "Perfumeria", "COLGATE Max fresh Pasta de dientes con flúor 75 ml").canonical, "higiene_personal");
+  // "azúcar" es casi siempre el reclamo "sin azúcares añadidos", no el producto.
+  assert.strictEqual(en("alcampo", "Alimentación", "MENSAJERO Mitades de melocotón en almíbar sin azúcar añadido 240 g.").canonical, "despensa");
+  assert.strictEqual(en("alcampo", "Desayuno y Merienda", "PRODUCTO ALCAMPO Azúcar blanco 1 Kg.").canonical, "dulces_chocolate");
+  // "NACHO" es una marca de conservas; sólo el plural es el aperitivo.
+  assert.strictEqual(en("alcampo", "Alimentación", "NACHO Atún en aceite de girasol en conserva 141 g.").canonical, "pescado_marisco");
+  assert.strictEqual(en("alcampo", "Alimentación", "SANTA MARÍA Nachos bolsa de 185 g.").canonical, "snacks");
+  // "bebida de avena" es bebida, no cereal de desayuno: 115 bricks.
+  assert.strictEqual(en("alcampo", "Desayuno y Merienda", "ALPRO Bebida de avena 100% vegetal 1 l").canonical, "bebidas");
+  // El chocolate va antes que la leche, igual que en POR_PALABRA.
+  assert.strictEqual(en("alcampo", "Desayuno y Merienda", "MILKA Chocolate con leche y almendras enteras 100 gr.").canonical, "dulces_chocolate");
+  // "nuez moscada" es una especia, no un fruto seco.
+  assert.strictEqual(en("alcampo", "Alimentación", "CARMENCITA Nuez moscada molida 43 g.").canonical, "despensa");
+});
+
+test("\"Cerdo y cochinillo\" es el mismo pasillo que \"Cerdo\"", () => {
+  // Se comprobó antes de fusionar: los 41 productos de ahorramás no tienen ni un
+  // cochinillo, son cortes de cerdo. El cochinillo suelto NO se fusiona, para que
+  // una cadena que traiga ese pasillo de verdad no se lo coma el del cerdo.
+  assert.strictEqual(categorias.nombrePasillo("Cerdo y cochinillo", "carne"), "Cerdo");
+  assert.strictEqual(
+    categorias.clavePasillo("Cerdo y cochinillo", "carne"),
+    categorias.clavePasillo("Cerdo", "carne")
+  );
+  assert.notStrictEqual(
+    categorias.clavePasillo("Cochinillo", "carne"),
+    categorias.clavePasillo("Cerdo", "carne")
+  );
+  // Y no toca la pescadería, donde los pasillos cortos SÍ son distintos.
+  assert.notStrictEqual(
+    categorias.clavePasillo("Bacalao", "pescado_marisco"),
+    categorias.clavePasillo("Merluza", "pescado_marisco")
   );
 });
 

@@ -68,23 +68,18 @@ const ID_CANONICAS = new Set(CANONICAS.map((c) => c.id));
 // mezcla. Se escribe la etiqueta tal cual la emite la cadena.
 const POR_ETIQUETA = {
   alcampo: {
-    "Alimentación": "despensa",
-    // "Frescos" NO va aquí: es un departamento entero (frutería + carnicería +
-    // pescadería + charcutería + quesería + horno), no un pasillo. Está en
-    // DEPARTAMENTOS, que lo resuelve por el nombre del producto.
-    "Desayuno y Merienda": "cereales_galletas",
-    "Bebidas": "bebidas",
-    "Perfumeria": "cosmetica_perfumeria",
-    "Droguería": "limpieza_drogueria",
+    // Las siete raíces gruesas de alcampo NO van aquí, por el mismo motivo que
+    // "Frescos": son departamentos enteros, no pasillos. "Alimentación" (3.332
+    // productos) es la despensa MÁS la pasta, el arroz, las legumbres, los
+    // aperitivos, las conservas y el pan de molde; "Bebidas" (2.333) mete 1.100
+    // botellas de vino, cerveza y whisky en el mismo cajón que el agua mineral.
+    // Están en DEPARTAMENTOS, que las resuelve por el nombre del producto.
     "Leche, Huevos, Lácteos, Yogures y Bebidas vegetales": "lacteos_huevos",
     "Congelados": "congelados",
     "Bebé": "bebe",
     "Parafarmacia": "parafarmacia",
     "Mascotas": "mascotas",
     "Comida Preparada": "platos_preparados",
-    "Sin Gluten / Sin Lactosa, Nutrición deportiva y Funcional": "despensa",
-    "Supermercado Ecológico": "despensa",
-    "Veganos": "despensa",
     // Mezclan bazar y compra: la etiqueta no decide, decide el nombre.
     "Folletos y Promociones": NO_FIABLE,
     "Campañas": NO_FIABLE,
@@ -102,10 +97,7 @@ const POR_ETIQUETA = {
     "Deportes y Maletas": FUERA_DE_ALCANCE,
   },
   dia: {
-    "Higiene y cuidado del cuerpo": "higiene_personal",
-    "Limpieza y hogar": "limpieza_drogueria",
     "Cervezas, vinos y licores": "bebidas_alcohol",
-    "Cabello y perfumería": "cosmetica_perfumeria",
     "Chocolates y golosinas": "dulces_chocolate",
     "Galletas, cereales y mermeladas": "cereales_galletas",
     "Conservas, caldos y cremas": "despensa",
@@ -137,12 +129,10 @@ const POR_ETIQUETA = {
   },
   aldi: {
     "Despensa": "despensa",
-    "Limpieza y hogar": "limpieza_drogueria",
     "Congelados": "congelados",
     "Charcutería": "charcuteria_quesos",
     "Chocolates y dulces": "dulces_chocolate",
     "Platos preparados y pizzas": "platos_preparados",
-    "Cuidado personal": "higiene_personal",
     "Aperitivos": "snacks",
     "Quesos": "charcuteria_quesos",
     "Panadería y bollería": "panaderia_bolleria",
@@ -488,6 +478,19 @@ const PASILLOS_POR_PALABRA = {
     // regla de arriba; la guarda queda por si otra cadena trae algo parecido.
     [palabras("pan"), null],
     [palabras("picada", "hamburguesa", "burger"), "Carne picada y hamburguesas"],
+    // "Cerdo" (bm + mercadona + aldi, 46) y "Cerdo y cochinillo" (ahorramás, 41) son
+    // el mismo pasillo con el nombre más largo en una cadena, no una subcategoría
+    // legítima. Se comprobó contra los 41 nombres reales de ahorramás antes de
+    // fusionar, porque el cochinillo SÍ podría ser un pasillo aparte (como "Bacalao"
+    // y "Merluza" en la pescadería, que a propósito no se fusionan): no hay ni un
+    // producto de cochinillo dentro. Son 41 cortes de cerdo -- lomo, solomillo,
+    // carrillada, secreto, presa, magro --, o sea las mismas palabras MENOS una, que
+    // es el caso de "Hamburguesas y picadas" de la línea de arriba y se arregla igual.
+    //
+    // Es seguro dentro de este cajón: de sus 54 nombres de pasillo, "cerdo" sólo
+    // aparece en esos dos. No hay ningún pasillo mixto tipo "Cerdo y ternera" al que
+    // la regla le pondría un nombre que miente.
+    [palabras("cerdo"), "Cerdo"],
   ],
 };
 
@@ -663,10 +666,47 @@ function porPalabra(etiqueta) {
 // justo la lista que no conviene escribir, porque los nombres de fruta aparecen
 // también en la bollería ("Tarta de manzana") y en la charcutería ("Jamón con
 // melón").
+//
+// El mismo bug lo tienen las OTRAS raíces de alcampo, y pesan mucho más que
+// "Frescos". Medido contra producción: "Alimentación" son 3.332 productos, todos en
+// `despensa`, y ahí dentro hay pasta (171 nombres con la palabra), arroz (98),
+// legumbres, aceitunas y encurtidos (116), frutos secos, patatas fritas (68),
+// conservas de pescado (119 con "atún") y pan de molde. "Bebidas" son 2.333 y ~1.100
+// llevan vino (565), cerveza (387), whisky (78), licor (64), cava (60), ginebra (53)
+// o vodka (36): mil botellas de alcohol en el cajón del agua mineral. "Desayuno y
+// Merienda" son 2.682 con 708 chocolates y 384 cafés dentro de `cereales_galletas`.
+//
+// Se arreglan igual y con la misma garantía: cajón por defecto = el que tenían, así
+// que un producto que las reglas de nombre no reconozcan se queda donde está hoy y
+// el cambio sólo puede mover lo que se ha identificado positivamente.
+//
+// dia y aldi entran sólo con las raíces que mezclan dos cajones declarados: el papel
+// higiénico de "Limpieza y hogar" es `papel_desechables` y el champú de "Cabello y
+// perfumería" es `higiene_personal`, y las dos cosas las dice POR_PALABRA. El resto
+// de sus etiquetas son pasillos de verdad y se quedan en POR_ETIQUETA.
 const DEPARTAMENTOS = {
-  alcampo: { "Frescos": "frutas_verduras" },
+  alcampo: {
+    "Frescos": "frutas_verduras",
+    "Alimentación": "despensa",
+    "Bebidas": "bebidas",
+    "Desayuno y Merienda": "cereales_galletas",
+    "Perfumeria": "cosmetica_perfumeria",
+    "Droguería": "limpieza_drogueria",
+    "Sin Gluten / Sin Lactosa, Nutrición deportiva y Funcional": "despensa",
+    "Supermercado Ecológico": "despensa",
+    "Veganos": "despensa",
+  },
   ahorramas: { "Frescos": "frutas_verduras" },
   bm: { "Frescos": "frutas_verduras" },
+  dia: {
+    "Limpieza y hogar": "limpieza_drogueria",
+    "Higiene y cuidado del cuerpo": "higiene_personal",
+    "Cabello y perfumería": "cosmetica_perfumeria",
+  },
+  aldi: {
+    "Limpieza y hogar": "limpieza_drogueria",
+    "Cuidado personal": "higiene_personal",
+  },
 };
 
 // Reglas sobre el NOMBRE del producto. NO son las mismas que POR_PALABRA y no se
@@ -692,7 +732,20 @@ const DEPARTAMENTOS = {
 // y `vieira` en la primera versión). `palabras()` añade el plural español (-s/-es)
 // una sola vez y para todas.
 function palabras(...lista) {
-  return new RegExp(`\\b(?:${lista.join("|")})(?:es|s)?\\b`);
+  // El plural va en las DOS puntas de la frase, y no sólo al final. En español el
+  // plural de un nombre compuesto cae en la primera palabra tanto o más que en la
+  // última: "Pañuelos de papel", "Pastas almendradas", "Bolsas de basura", "Hojas
+  // de afeitar". Con el plural sólo al final, `palabras("panuelo de papel")` no
+  // encuentra "Pañuelos de papel", y el producto se va al cajón de otra regla --
+  // silenciosamente, porque hay reglas de sobra que lo recogen mal.
+  //
+  // Es el mismo fallo que ya se pagó tres veces por escribir las reglas a mano
+  // ("croissant", "burrata", "vieira") y dos más con esta función ("pastas
+  // almendradas" acabó en el pasillo de los macarrones, "pañuelos de papel" en
+  // droguería). Se arregla una vez acá en vez de recordar escribir cada frase en
+  // sus dos formas, que es justo lo que esta función existe para evitar.
+  const conPlural = lista.map((frase) => frase.replace(/^(\S+)(?=\s)/, "$1(?:es|s)?"));
+  return new RegExp(`\\b(?:${conPlural.join("|")})(?:es|s)?\\b`);
 }
 
 const POR_NOMBRE = [
@@ -700,7 +753,54 @@ const POR_NOMBRE = [
   // queso de cabra, nueces y manzana"), así que cualquier regla de queso, pollo o
   // atún se la lleva antes. Es verdura preparada, igual que el pasillo "Lechuga y
   // ensalada preparada" de mercadona.
+  // Fruta y verdura fresca cuyo nombre lleva la palabra del producto elaborado:
+  // "Naranjas de zumo" son naranjas y "Pepinos snack" son pepinos, pero las reglas
+  // de bebidas y de aperitivos de más abajo se los llevan. Van acá arriba porque
+  // son la excepción exacta, no una categoría entera.
+  [palabras("naranja de zumo", "pepino snack"), "frutas_verduras"],
+
   [palabras("ensalada", "ensaladilla", "brotes tiernos", "canonigo", "rucula", "escarola", "radicchio", "mezclum"), "frutas_verduras"],
+
+  // --- Guardas que tienen que ganarle a la charcutería y a la carnicería -----
+  //
+  // Estas cinco reglas van tan arriba porque las palabras de charcutería, carne y
+  // pescado aparecen dentro del nombre de productos que NO son de esos cajones, y
+  // ahí la regla de más abajo se los lleva. Medido contra el catálogo real:
+  // "Patatas fritas onduladas sabor jamón" -> charcutería, "Helado de nata bloque"
+  // -> lácteos, "Caldo de pollo 24 pastillas" -> carnicería, "Aceitunas rellenas de
+  // anchoas" -> pescadería.
+  //
+  // Cada una se verificó contra los 2.889 nombres de "Frescos", que es el
+  // departamento que ya dependía de esta tabla, para no romper lo que ya acertaba:
+  // "helado", "café", "patatas fritas", "pipas", "té", "infusión" y "tortita" no
+  // aparecen NI UNA vez ahí, así que subirlas no puede mover nada de frescos. Las
+  // dos únicas coincidencias son "Sopa Juliana deshidratada" y "Preparado para
+  // caldo", y las dos son despensa: la guarda las arregla, no las rompe.
+  [palabras("helado", "polo", "sorbete", "granizado"), "congelados"],
+  [palabras(
+    "cafe", "cappuccino", "capuchino", "espresso", "ristretto", "macchiato",
+    "latte", "te verde", "te rojo", "te negro", "te blanco", "rooibos",
+    "infusion", "achicoria", "cacao soluble", "cacao en polvo"
+  ), "cafe_te"],
+  // Aperitivos sólo con los nombres que NO comparte la charcutería. "aceituna",
+  // "snack", "aperitivo", "almendra" y "pistacho" NO están: los usa el embutido
+  // ("Mortadela con aceitunas", "Fiambre de pavo con pistachos", "Mini fuet ideal
+  // como snack", 28 productos de Frescos), así que van en el bloque de abajo, ya
+  // pasada la charcutería. Las excepciones acotadas -- "aceitunas rellenas" y los
+  // frutos secos "tostados" -- sí suben, porque ésas no las usa ningún embutido y
+  // sin ellas caen en pescadería (por la anchoa del relleno) y en panadería (por
+  // la palabra "tostada").
+  [palabras(
+    "patatas frita", "patata frita", "patatas ondulada", "cortez", "gusanito",
+    "nachos", "dorito", "kikos", "palomita", "torrezno", "pipa",
+    "tortita", "pretzel", "aceituna rellena", "rellena de anchoa", "avellana tostada", "almendra tostada",
+    "cacahuete tostado", "almendra frita", "maiz frito"
+  ), "snacks"],
+  [palabras("caldo", "sopa", "consome", "sopinstant", "pastilla de caldo"), "despensa"],
+  [palabras(
+    "leche infantil", "leche de continuacion", "leche de inicio", "papilla",
+    "potito", "tarrito", "biberon", "chupete", "tetina", "cereales infantiles"
+  ), "bebe"],
 
   // La hamburguesa va ANTES que el queso: el queso aparece en su nombre como
   // ingrediente ("Burger meat de vaca madurada con cheddar inglés"), igual que en
@@ -737,7 +837,7 @@ const POR_NOMBRE = [
   // Pescadería. Antes que la carnicería: "Lomo de salmón" y "Filete de sardina"
   // llevan las dos palabras de un corte de carne.
   [palabras(
-    "salmon", "merluza", "atun", "bacalao", "gamba", "langostino", "cigala", "calamar",
+    "salmon", "salmun", "merluza", "atun", "bacalao", "gamba", "langostino", "cigala", "calamar",
     "chipiron", "pota", "poton", "pulpo", "pulpito", "sardina", "anchoa", "boqueron", "almeja",
     "mejillon", "berberecho", "navaja", "sepia", "rodaballo", "lubina", "dorada", "trucha",
     "lenguado", "rape", "cazon", "emperador", "panga", "tilapia", "caballa", "jurel", "bonito",
@@ -763,18 +863,52 @@ const POR_NOMBRE = [
   // sin este vocabulario quedaban ~200 productos de horno dentro de frutas y
   // verduras por el defecto del departamento.
   [palabras(
-    "pan", "barra de pan", "hogaza", "chapata", "chapatina", "baguette", "panecillo", "bollo",
-    "bolleria", "croissant", "napolitana", "ensaimada", "magdalena", "bizcocho", "bizcochada",
+    "pan", "barra de pan", "hogaza", "chapata", "chapatina", "baguette", "panecillo", "bollo", "bollito",
+    "bolleria", "croissant", "croisant", "napolitana", "ensaimada", "magdalena", "bizcocho", "bizcochada",
     "palmera", "palmerita", "rosquilla", "berlina", "donut", "dona", "tarta", "tartaleta",
-    "pastel", "pasta almendrada", "hojaldre", "hojaldrito", "brioche", "empanada", "panaderia",
+    "pastel", "pasta almendrada", "banda de fruta", "hojaldre", "hojaldrito", "brioche", "empanada", "panaderia",
     "pasteleria", "reposteria", "tostada", "biscote", "colines", "picos", "caracola", "trenza",
-    "roscon", "muffin", "brownie", "galleta", "bocatin", "mollete", "gofre", "pepito",
+    "roscon", "muffin", "brownie", "bocatin", "mollete", "gofre", "pepito",
     "cana rellena", "flauta", "candeal", "masa madre", "levadura fresca", "obrador"
   ), "panaderia_bolleria"],
 
+  // Guarda: las bebidas vegetales se nombran por el cereal del que salen, así que
+  // tienen que decidirse antes que el pasillo del muesli. Son 115 productos.
+  [palabras("bebida vegetal", "bebida de avena", "bebida de soja", "bebida de almendra", "bebida de arroz", "bebida de coco", "bebida de anacardo"), "bebidas"],
+
+  // --- Cereales y galletas. La galleta cae acá y no en panadería porque es lo que
+  // declara POR_PALABRA (`galleta` -> cereales_galletas), y el bloque de panadería
+  // de arriba ya se llevó lo que sí es obrador ("Tarta de galleta", 3 productos de
+  // Frescos, medido).
+  [palabras(
+    "galleta", "cereal", "muesli", "granola", "copos de avena", "copos de maiz",
+    "barrita de cereal", "barrita energetica", "salvado", "germen de trigo"
+  ), "cereales_galletas"],
+
+  // --- Dulces: lo distintivo. Va antes que los frutos secos por el mismo motivo
+  // por el que va antes que la leche en el bloque de frescos: "Chocolate con
+  // avellanas" es chocolate, no un aperitivo.
+  [palabras(
+    "chocolate", "bombon", "chocolatina", "tableta de chocolate", "turron",
+    "mazapan", "polvoron", "caramelo", "gominola", "golosina", "regaliz", "chicle",
+    "nube", "marshmallow", "crema de cacao", "sirope", "nata montada en spray",
+    "cobertura de chocolate", "grageas"
+  ), "dulces_chocolate"],
+
+  // Guarda de cosmética: "leche" y "manteca" también nombran cosméticos, y sin
+  // esto la regla de lácteos de la línea siguiente manda 91 protectores solares a
+  // la nevera ("Leche solar protectora", "Leche corporal", "Leche desmaquillante").
+  // Va pegada a la regla que corrige, y no en el bloque de cosmética del final,
+  // porque tiene que adelantarse a "leche" y ahí ya sería tarde.
+  [palabras(
+    "leche solar", "leche corporal", "leche protectora", "leche desmaquillante",
+    "leche limpiadora", "leche hidratante", "leche de belleza", "leche aftersun",
+    "leche after sun", "manteca corporal", "mantequilla corporal"
+  ), "cosmetica_perfumeria"],
+
   // Huevos y lácteos frescos. Después del queso a propósito: el queso también es
   // un lácteo, pero en esta taxonomía tiene su propio cajón con la charcutería.
-  [palabras("huevo", "leche", "yogur", "nata", "mantequilla", "margarina", "cuajada", "kefir", "natilla", "flan", "arroz con leche"), "lacteos_huevos"],
+  [palabras("huevo", "leche", "yogur", "nata", "mantequilla", "margarina", "cuajada", "kefir", "natilla", "flan", "arroz con leche", "crema catalana", "crema pastelera", "gelatina"), "lacteos_huevos"],
 
   // Cocina de la tienda: lo que ya viene hecho.
   [palabras(
@@ -794,6 +928,242 @@ const POR_NOMBRE = [
   // "alino" y no "aliño": estos patrones se comparan contra texto ya normalizado,
   // donde la ñ es una n. Es el mismo fallo que documenta POR_PALABRA más arriba.
   [palabras("salsa", "vinagreta", "alino", "mostaza", "mayonesa", "ketchup", "alioli"), "despensa"],
+
+  // ===========================================================================
+  // La otra mitad del súper: todo lo que no es el lineal de frescos.
+  // ===========================================================================
+  //
+  // Hasta acá la tabla sólo sabía de frescos, porque se escribió para un único
+  // departamento ("Frescos" de alcampo). Ahora la usan dos cosas más -- los
+  // departamentos gruesos de alcampo y la pasada de respaldo de `resolve` -- y las
+  // dos ven el catálogo entero: bebidas, droguería, perfumería, desayuno.
+  //
+  // Todo lo que sigue va DESPUÉS del bloque de frescos, y no es casualidad: es lo
+  // que hace que ampliar la tabla no pueda romper lo que ya acertaba. Las reglas
+  // de frescos ya se ejecutaron, así que ningún nombre de queso, pescado, carne o
+  // bollería llega hasta acá. Sólo se sube algo cuando hay evidencia medida de que
+  // tiene que ganarle a una regla de frescos, y entonces se documenta arriba.
+  //
+  // El criterio para elegir el cajón NO es la opinión de quien escribe: es el que
+  // ya declara POR_PALABRA para ese tipo de producto. Así el mapa no inventa una
+  // convención nueva por debajo. Ejemplos que salieron de aplicarlo: el champú es
+  // higiene y no cosmética (POR_PALABRA lo dice), el papel higiénico es
+  // papel_desechables y no droguería, y el vino es bebidas_alcohol y no bebidas.
+  // Donde POR_PALABRA es ambiguo se deja sin regla, no se decide acá.
+
+  // --- Mascotas y bebé, primero: son un cajón por destinatario, no por producto,
+  // así que un champú de perro es mascotas y no higiene.
+  // El pañal va acá abajo y no en la guarda de bebé de arriba: "Panales de cabello
+  // de ángel" es un dulce de obrador, y la panadería tiene que decidir antes.
+  [palabras("panal", "toallita humeda"), "bebe"],
+  [palabras("para perro", "para gato", "pienso", "arena de gato", "arena para gato", "lecho para gato", "snack para perro", "comida para perro", "comida para gato", "collar antiparasitario"), "mascotas"],
+
+  // --- Papel y desechables. Antes que droguería porque las cadenas los mezclan en
+  // el mismo pasillo y POR_PALABRA ya declara que son cajones distintos.
+  [palabras(
+    "papel higienico", "papel de cocina", "rollo de cocina", "servilleta",
+    "panuelo de papel", "papel de aluminio", "papel de horno", "papel vegetal",
+    "papel de secar", "film transparente", "film de cocina", "bolsa de basura",
+    "bolsa de congelacion", "bolsa congelacion", "bolsa de conservacion", "saco de basura",
+    "mantel de papel", "molde de papel", "plato de carton", "vaso de carton",
+    "plato de plastico", "vaso de plastico", "bolsa para cubitos", "papel de plata"
+  ), "papel_desechables"],
+
+  // --- Limpieza y droguería. Va antes que higiene porque "jabón" y "gel" los usan
+  // los dos, y acá están acotados a su sentido de limpieza ("jabón para lavadora",
+  // "gel WC"), mientras que el bloque de higiene los coge genéricos.
+  [palabras(
+    "detergente", "suavizante", "perfumador de ropa", "perfumador liquido",
+    "perlas perfumadas", "quitamanchas", "blanqueador", "blanqueante", "lejia",
+    "amoniaco", "salfuman", "sosa caustica", "percarbonato", "antical",
+    "lavavajillas", "friegasuelos", "limpiador", "limpiacristales", "limpiahogar",
+    "limpiamuebles", "limpiametales", "limpiasuelos", "quitagrasas",
+    "desengrasante", "desincrustante", "desatascador", "desinfectante",
+    "ambientador", "insecticida", "antipolillas", "raticida", "abrillantador",
+    "estropajo", "fregona", "bayeta", "mopa", "escoba", "recogedor", "cepillo de barrer",
+    "guante de latex", "guante de fregar", "guante de limpieza", "guante latex",
+    "gel wc", "disco wc", "disco para wc", "tinte para ropa", "aditivo para",
+    "deshumidificador", "betun", "crema para calzado", "jabon para lavadora",
+    "jabon de lavadora", "oxigeno activo", "toallita limpia", "recambio de fregona"
+  ), "limpieza_drogueria"],
+
+  // --- Pilas e iluminación. Las velas entran acá por la misma razón por la que
+  // `scope.js` las mantiene en el catálogo: mercadona tiene su propio pasillo
+  // ("Velas y decoración", 19 productos) y es lo más cerca de "iluminación" que
+  // hay entre los cajones.
+  [palabras("pila alcalina", "pilas alcalinas", "bombilla", "linterna", "vela", "tealight", "candelita", "portapilas", "cargador de pilas"), "pilas_iluminacion"],
+
+  // --- Parafarmacia. Sin "vitamina" a secas: la usan los champús ("Champú con
+  // vitaminas frutales") y ahí la regla se lleva la cosmética entera. Sólo entran
+  // las formas en que se nombra un COMPLEMENTO, que no son ambiguas.
+  [palabras(
+    "complemento alimenticio", "suplemento", "multivitaminico", "colageno",
+    "vitaminas y minerales", "comprimido efervescente", "capsula blanda", "creatina", "magnesio", "omega 3",
+    "probiotico", "jalea real", "ginseng", "valeriana", "melatonina",
+    "tirita", "venda", "esparadrapo", "gasa esteril", "suero fisiologico",
+    "alcohol sanitario", "agua oxigenada", "termometro", "preservativo",
+    "lubricante intimo", "gel lubricante", "hoja afeitar", "test de embarazo", "jarabe",
+    "ibuprofeno", "paracetamol", "aspirina", "solucion salina"
+  ), "parafarmacia"],
+
+  // --- Higiene: boca. POR_PALABRA declara `dentifric|bucal` en higiene_personal,
+  // así que la pasta de dientes es higiene y no cosmética. También hace de guarda
+  // de la regla de pasta alimenticia de más abajo: sin ella, "Pasta de dientes"
+  // acaba en el pasillo de los macarrones.
+  [palabras(
+    "pasta de dientes", "pasta dentifrica", "dentifrico", "cepillo de dientes",
+    "cepillo dental", "kit dental", "seda dental", "hilo dental", "cinta dental",
+    "colutorio", "enjuague bucal", "irrigador", "limpieza dental"
+  ), "higiene_personal"],
+
+  // --- Higiene personal. Champú y acondicionador van acá y no en cosmética porque
+  // es lo que declara POR_PALABRA. Hoy 312 champús están en cosmética, pero no por
+  // una decisión: es el arrastre de las raíces gruesas ("Perfumeria" de alcampo,
+  // "Cabello y perfumería" de dia), que es justo el bug que este cambio corrige.
+  [palabras(
+    "champu", "acondicionador", "gel de ducha", "gel de bano", "gel de higiene",
+    "gel intimo", "jabon de manos", "jabon intimo", "jabon liquido",
+    "jabon de glicerina", "pastilla de jabon", "desodorante", "antitranspirante",
+    "compresa", "tampon", "salvaslip", "protegeslip", "copa menstrual",
+    "higiene intima", "bastoncillo", "polvos de talco", "agua de colonia infantil"
+  ), "higiene_personal"],
+
+  // --- Cosmética y perfumería: lo específico. Lo genérico ("crema", "loción")
+  // espera al final del bloque, ya pasada toda la comida, porque "Crema de jamón"
+  // y "Crema de puerros" también son cremas.
+  //
+  // Las tres primeras líneas son guardas de palabras de comida usadas en
+  // cosmética: "Agua micelar" (no es agua de beber), "Aceite capilar" (no es
+  // aceite de oliva). Sin ellas caen en bebidas y en despensa: 43 y 213 productos
+  // medidos.
+  [palabras("agua micelar", "agua de perfume", "agua de colonia", "agua termal", "bruma facial"), "cosmetica_perfumeria"],
+  [palabras("aceite capilar", "aceite corporal", "aceite esencial", "aceite desmaquillante", "aceite de labios", "aceite para el cuerpo"), "cosmetica_perfumeria"],
+  [palabras(
+    "perfume", "colonia", "eau de toilette", "eau de parfum", "after shave",
+    "aftershave", "maquillaje", "base de maquillaje", "corrector de ojeras",
+    "mascara de pestanas", "rimel", "pintalabios", "barra de labios",
+    "brillo de labios", "colorete", "sombra de ojos", "delineador", "eyeliner",
+    "lapiz de ojos", "lapiz de cejas", "lapiz de labios", "esmalte de unas",
+    "quitaesmalte", "laca de unas", "laca", "espuma para el pelo", "gomina",
+    "cera para el pelo", "tinte", "coloracion", "decolorante", "depilatoria",
+    "depilatorio", "cera depilatoria", "banda depilatoria", "maquinilla", "maquina de afeitar",
+    "cuchilla de afeitar", "hoja de afeitar", "sistema afeitado", "espuma de afeitar",
+    "gel de afeitar", "brocha de afeitar", "cortaunas", "tijera de unas",
+    "lima de unas", "pinza de unas", "alicate de unas", "alicate unas", "fijador", "disco desmaquillante", "toallita desmaquillante",
+    "algodon desmaquillante", "autobronceador", "manicura", "pedicura"
+  ), "cosmetica_perfumeria"],
+
+  // --- Bebidas con alcohol. Antes que bebidas a secas, y antes que los dulces,
+  // porque "Cerveza con miel" y "Ron miel" existen. "ron" es seguro con `\b`:
+  // "macarrones" no tiene frontera de palabra antes de "ron", que es el falso
+  // positivo que documenta el comentario de POR_NOMBRE. NO entran "anís" (el anís
+  // estrellado es una especia), "manzanilla" ni "fino" (son infusiones), y tampoco
+  // "reserva" ni "crianza", que son modificadores y no dicen qué es el producto.
+  [palabras(
+    "vino", "cerveza", "whisky", "whiskey", "bourbon", "licor", "ginebra", "gin",
+    "vodka", "ron", "tequila", "mezcal", "sidra", "cava", "champagne", "champan",
+    "vermut", "vermouth", "sangria", "tinto de verano", "brandy", "cognac", "conac", "orujo",
+    "pacharan", "absenta", "moscatel", "oporto", "jerez", "espumoso", "hidromiel"
+  ), "bebidas_alcohol"],
+
+  // --- Bebidas sin alcohol. "bebida vegetal" y "bebida de avena" van acá y hacen
+  // de guarda de la regla de cereales de abajo: son 115 bricks de avena que sin
+  // esto acaban en el pasillo del muesli.
+  [palabras(
+    "refresco", "zumo", "nectar", "smoothie", "bebida isotonica", "bebida energetica",
+    "bebida vegetal", "bebida de avena", "bebida de soja", "bebida de almendra",
+    "bebida de arroz", "bebida de coco", "agua mineral", "agua vitaminada",
+    "agua con gas", "agua sin gas", "agua de mar", "te al limon", "te frio", "bebida de te", "tonica", "gaseosa", "limonada",
+    "horchata", "kombucha", "mosto", "sifon", "granizado de limon", "agua"
+  ), "bebidas"],
+
+
+
+  // --- Guardas de despensa antes de la pasta y de los frutos secos: "nuez
+  // moscada" es una especia (11 productos) y "pasta de azúcar" es repostería, no
+  // pasta alimenticia.
+  [palabras("crema de fruta", "almibar", "en conserva", "escabeche", "al natural"), "despensa"],
+  [palabras(
+    "nuez moscada", "pasta de azucar", "pasta de vainilla", "pasta de sesamo",
+    "pasta de achiote", "pasta de curry", "pasta de tomate", "pasta de aceituna",
+    "pasta de fijacion", "crema de verdura", "crema de puerro", "crema de calabaza",
+    "crema de calabacin", "crema de champinon", "crema de guisante"
+  ), "despensa"],
+
+  // --- Pasta, arroz y legumbres. "pasta" a secas se puede usar porque las tres
+  // formas en que NO es pasta alimenticia ya se fueron arriba: "pasta de dientes"
+  // en el bloque de higiene, y "pasta de azúcar/sésamo/fijación" en la guarda de
+  // la línea anterior. Medido: de los 256 nombres con "pasta de", los que quedan
+  // son "Pasta de sémola de trigo duro", que sí es pasta.
+  [palabras(
+    "pasta", "macarron", "espagueti", "spaghetti", "tallarin", "fideo", "noodle",
+    "ramen", "penne", "fusilli", "farfalle", "tagliatelle", "rigatoni", "helice",
+    "arroz", "lenteja", "garbanzo", "alubia", "judia blanca", "judion", "fabe",
+    "quinoa", "cuscus", "couscous", "bulgur", "mijo", "soja texturizada", "semola"
+  ), "pasta_arroz_legumbres"],
+
+
+  // --- Aperitivos y frutos secos: la parte que tuvo que esperar a la charcutería.
+  // "aceituna", "snack", "aperitivo", "almendra" y "pistacho" están acá abajo y no
+  // en la guarda de arriba porque los usa el embutido: "Mortadela con aceitunas",
+  // "Fiambre de pavo con pistachos", "Mini fuet ideal como snack" (28 productos de
+  // Frescos, medido). Acá ya no hay riesgo: la charcutería se los quedó antes.
+  [palabras(
+    "aceituna", "encurtido", "pepinillo", "banderilla", "altramuz", "alcaparra",
+    "almendra", "avellana", "nuez", "pistacho", "anacardo", "cacahuete", "macadamia",
+    "pecana", "pinon", "fruto seco", "frutos secos", "chicharron", "snack", "aperitivo",
+    "coctel de frutos", "mezcla de frutos", "orejon", "pasa sultana"
+  ), "snacks"],
+
+  // --- Dulces: lo genérico. Al final del bloque de comida porque "miel" y
+  // "azúcar" aparecen como ingrediente en cosas que no son dulces: "Cacahuetes
+  // tostados con miel" (aperitivo), "Salsa barbacoa con miel" (despensa), "Pan con
+  // miel" (panadería). Los tres cajones ya decidieron antes. Medido: 11 productos.
+  [palabras(
+    "miel", "mermelada", "confitura", "jalea", "edulcorante", "sacarina",
+    "estevia", "panela", "melaza", "azucar blanco", "azucar moreno", "azucar glas",
+    "azucar de cana", "azucar invertido", "azucarillo"
+  ), "dulces_chocolate"],
+
+  // --- Despensa: lo genérico. Es el cajón más ancho, así que va al final de la
+  // comida: cualquier cosa que una regla más específica haya reconocido ya se fue.
+  [palabras(
+    "aceite", "vinagre", "especia", "sazonador", "condimento", "conserva",
+    "harina", "levadura", "sal fina", "sal gruesa", "sal marina", "pimienta",
+    "pimenton", "azafran", "oregano", "curry", "comino", "canela", "clavo en grano",
+    "laurel", "palmito", "alcachofa en conserva", "maiz dulce",
+    "fabada", "preparado para cocido", "preparado para fabada", "cocido en conserva",
+    "callos en salsa", "tomate frito",
+    "tomate triturado", "tomate natural", "leche de coco", "nata para cocinar",
+    "caldo concentrado", "colorante alimentario", "gelatina en polvo", "cuajo",
+    "pan rallado", "fecula", "maicena", "tahina", "hummus en conserva"
+  ), "despensa"],
+
+  // --- Fruta y verdura, y sólo acá al final. POR_NOMBRE no tiene vocabulario de
+  // frutería por diseño, y el comentario de arriba explica por qué: en "Frescos" el
+  // cajón por defecto YA es frutas_verduras, así que escribir la lista no aporta
+  // nada y en cambio se lleva la "Tarta de manzana" del obrador y el "Jamón con
+  // melón" de la charcutería. Acá abajo esa objeción no aplica: la panadería, la
+  // charcutería, los lácteos, las bebidas y la despensa ya decidieron. Lo que llega
+  // hasta este punto llamándose "Melón" es un melón, y hacía falta para las hojas
+  // sin rama de bm ("Melones y sandías", "Guisantes, judías y habas").
+  [palabras(
+    "guisante", "judia verde", "haba", "melon", "sandia", "perejil", "cilantro",
+    "hierbabuena", "albahaca", "hierba aromatica", "brote", "germinado"
+  ), "frutas_verduras"],
+
+  // --- Cosmética: lo genérico, y por eso lo último de todo. "crema", "loción" y
+  // "mascarilla" las comparte media tienda ("Crema de jamón", "Crema de puerros",
+  // "Mascarilla capilar"), así que sólo puede decidir cuando ya han hablado la
+  // charcutería, la despensa y la higiene. Lo que llega hasta acá con la palabra
+  // "crema" es un cosmético.
+  [palabras(
+    "crema facial", "crema corporal", "crema de manos", "crema de dia",
+    "crema de noche", "crema antiarrugas", "contorno de ojos", "serum",
+    "exfoliante", "tonico facial", "protector solar", "proteccion solar",
+    "aftersun", "after sun", "mascarilla facial", "mascarilla capilar",
+    "parche hidrocoloide", "hidratante corporal", "locion", "crema", "mascarilla"
+  ), "cosmetica_perfumeria"],
 ];
 
 // Alcampo pega el CORTE al final del nombre, detrás de un guion: "Queso azul -
@@ -853,6 +1223,25 @@ function resolve(product) {
   // etiqueta plana: la hoja es más específica y por tanto más informativa.
   const palabra = porPalabra(aisle) || porPalabra(product.category);
   if (palabra) return { canonical: palabra, aisle, source: "keyword" };
+
+  // Quinta pasada: el NOMBRE del producto, sin departamento declarado. Es el
+  // último recurso y por eso va al final, pero cubre el agujero más grande del
+  // mapa: bm captura la hoja SIN su rama ("Secas", "Lonchas", "Oveja", "Rostro",
+  // "Máquina líquido"), y una hoja así no se puede resolver por su texto porque
+  // no dice de qué habla. El nombre del producto sí ("Alubia blanca larga 1 kg",
+  // "Queso en lonchas 8 unidades", "Detergente líquido ropa delicada").
+  //
+  // Es segura por construcción, y es la misma garantía que hace segura la pasada
+  // de DEPARTAMENTOS: sólo se ejecuta sobre las filas que hoy NO tienen cajón, así
+  // que no puede mover de sitio nada que ya esté clasificado. Un producto que
+  // tampoco reconozca por el nombre sigue saliendo sin cajón, visible en la
+  // cobertura, exactamente como hoy.
+  //
+  // Lo que NO es: un sustituto de POR_ETIQUETA. Cuando la etiqueta sirve, decide
+  // ella, porque el retailer sabe en qué pasillo puso el producto y el nombre sólo
+  // lo sugiere.
+  const nombre = porNombre(product.name);
+  if (nombre) return { canonical: nombre, aisle, source: "name" };
 
   return { canonical: null, aisle, source: null };
 }
