@@ -69,7 +69,9 @@ const ID_CANONICAS = new Set(CANONICAS.map((c) => c.id));
 const POR_ETIQUETA = {
   alcampo: {
     "Alimentación": "despensa",
-    "Frescos": "frutas_verduras",
+    // "Frescos" NO va aquí: es un departamento entero (frutería + carnicería +
+    // pescadería + charcutería + quesería + horno), no un pasillo. Está en
+    // DEPARTAMENTOS, que lo resuelve por el nombre del producto.
     "Desayuno y Merienda": "cereales_galletas",
     "Bebidas": "bebidas",
     "Perfumeria": "cosmetica_perfumeria",
@@ -231,7 +233,10 @@ const POR_PALABRA = [
   // tercera fila con "fruta" en el nombre que no se podía distinguir de las otras dos.
   [/frutos? secos?/i, "snacks"],
 
-  [/fruta|verdura|hortaliza|ensalada|lechuga|tomate|patata|cebolla|pimiento|zanahoria|platano|manzana|naranja|aguacate|champinon|seta|fruteria|verduleria|^frescos$|fresco de|granja/i, "frutas_verduras"],
+  // Sin `^frescos$`: "Frescos" es un departamento, no un pasillo, y lo resuelve
+  // DEPARTAMENTOS por el nombre del producto. Si una cadena nueva trae "Frescos",
+  // queda sin cajón (visible en la cobertura) en vez de irse en bloque a frutas.
+  [/fruta|verdura|hortaliza|ensalada|lechuga|tomate|patata|cebolla|pimiento|zanahoria|platano|manzana|naranja|aguacate|champinon|seta|fruteria|verduleria|fresco de|granja/i, "frutas_verduras"],
 
   [/pan\b|panaderia|bolleria|bizcocho|magdalena|croissant|donut|pasteleria|reposteria|tarta|coca|bolleria|barrita|tostad|biscote|molde|picos|rosquillet|picatoste|colines/i, "panaderia_bolleria"],
   [/galleta|cereal|muesli|copos|barritas de cereal|desayuno|almuerzo|merienda/i, "cereales_galletas"],
@@ -287,6 +292,98 @@ function aisleFrom({ category_path, category }) {
   if (path.length) return path[path.length - 1];
   const plana = String(category || "").trim();
   return plana || null;
+}
+
+// --- Pasillo canónico -------------------------------------------------------
+//
+// El cajón canónico une el catálogo a 24 cajones, pero DENTRO de un cajón los
+// pasillos siguen siendo el nombre que scrapeó cada cadena, y las nueve escriben
+// el mismo pasillo distinto. Medido contra producción: "Frutas" (dia 86 + aldi 3)
+// y "Fruta" (mercadona 54) son tres filas para 143 productos del mismo pasillo, y
+// "Fruta y verdura" (mercadona 59) una cuarta. En la app eso se ve como categorías
+// distintas, que es el segundo problema que reportó el usuario.
+//
+// Se resuelve en dos niveles, igual que el resto del mapa: primero lo mecánico,
+// que no puede equivocarse, y sólo lo que quede se escribe a mano.
+//
+//   1. clave mecánica: sin acentos, minúsculas, y singular/plural palabra por
+//      palabra. Une "Frutas"/"Fruta" y "Verduras"/"Verdura" sin decidir nada.
+//   2. sinónimos escritos a mano: los nombres que significan lo mismo pero no se
+//      parecen ("Fruta y verdura" con "Frutas", "Frutería" con "Fruta"). Esto NO
+//      se puede adivinar con reglas sobre strings sin dar falsos positivos que
+//      nadie puede auditar, así que se escribe y se revisa.
+//
+// Lo que NO hace: jerarquía. "Tomate" y "Naranja" siguen siendo pasillos propios y
+// no se meten dentro de "Frutas y verduras", porque son más específicos y esa
+// granularidad es justo lo que aporta el nivel de pasillo sobre el de cajón.
+//
+// Esta lógica estaba duplicada en el cliente (lib/pasillos.ts de market-app hacía
+// el nivel 1 en el móvil). Vive acá porque es taxonomía, no presentación: el
+// cliente no puede escribir los sinónimos del nivel 2 sin ver el catálogo entero.
+
+// Clave morfológica de una palabra. No busca el singular correcto -- sólo que las
+// dos formas caigan en la misma clave, que es un problema mucho más fácil: el
+// español no forma el plural quitando una "s" ("arroz" -> "arroces", "yogur" ->
+// "yogures"), pero sí se llega a una clave común desde las dos formas quitando la
+// "s", luego la "e", y mapeando "z" -> "c".
+//
+//   fruta / frutas   -> "fruta"     yogur / yogures -> "yogur"
+//   carne / carnes   -> "carn"      arroz / arroces -> "arroc"
+//
+// El corte en 4 letras protege las palabras cortas donde esto destruiría
+// información ("mes", "gas", "pan", "te") y las partículas ("y", "de", "con"), que
+// deben quedar intactas para que los nombres compuestos casen entre sí.
+function claveMorfologica(palabra) {
+  if (palabra.length < 4) return palabra;
+  let p = palabra;
+  if (p.endsWith("s")) p = p.slice(0, -1);
+  if (p.endsWith("e")) p = p.slice(0, -1);
+  if (p.endsWith("z")) p = `${p.slice(0, -1)}c`;
+  return p;
+}
+
+// Sinónimos de pasillo: clave mecánica -> nombre canónico. Se escribe la clave y
+// no el nombre crudo para no tener que repetir cada variante ortográfica: la
+// entrada "fruta y verdura" ya cubre "Fruta y verdura", "Frutas y verduras" y
+// "frutas y verdura".
+//
+// Sólo los pasillos GENÉRICOS de fruta y verdura, que es el caso reportado y el
+// que más pesa (unas 550 filas repartidas en 12 nombres). Los específicos
+// ("Tomate", "Naranja", "Lechuga y ensalada preparada") se quedan como están.
+const PASILLOS_SINONIMOS = {
+  "fruta": "Frutas y verduras",
+  "verdura": "Frutas y verduras",
+  "fruta y verdura": "Frutas y verduras",
+  "verdura y hortaliza": "Frutas y verduras",
+  "fruta y hortaliza": "Frutas y verduras",
+  "fruta variada": "Frutas y verduras",
+  "fruta de temporada": "Frutas y verduras",
+  "otra verdura": "Frutas y verduras",
+  "otra verdura y hortaliza": "Frutas y verduras",
+  "mezcla de verdura": "Frutas y verduras",
+  "verdura preparada": "Frutas y verduras",
+  "fruteria": "Frutas y verduras",
+};
+
+// La clave de agrupación de un nombre de pasillo. Dos pasillos con la misma clave
+// son el mismo pasillo.
+function clavePasillo(nombre) {
+  const base = normaliza(nombre).split(/\s+/).filter(Boolean).map(claveMorfologica).join(" ");
+  if (!base) return null;
+  const sinonimo = PASILLOS_SINONIMOS[base];
+  // El sinónimo se resuelve a la clave de SU nombre canónico, para que las doce
+  // variantes de fruta y verdura acaben en una única clave y no en doce que
+  // comparten etiqueta.
+  return sinonimo ? normaliza(sinonimo).split(/\s+/).map(claveMorfologica).join(" ") : base;
+}
+
+// El nombre canónico de un pasillo, si está escrito a mano. Cuando no lo está
+// devuelve null y el que llama elige la ortografía (la del pasillo con más
+// productos detrás), que es lo único honesto: entre "Frutas" y "Fruta" no hay una
+// correcta, hay una mayoritaria.
+function nombrePasillo(nombre) {
+  const base = normaliza(nombre).split(/\s+/).filter(Boolean).map(claveMorfologica).join(" ");
+  return PASILLOS_SINONIMOS[base] || null;
 }
 
 // Prefijos de ruta, con la regla del prefijo más largo. Una raíz limpia es una
@@ -345,6 +442,189 @@ function porPalabra(etiqueta) {
   return null;
 }
 
+// --- Cuarta pasada: el NOMBRE del producto, dentro de un departamento --------
+//
+// Hay etiquetas que no son un pasillo sino un DEPARTAMENTO entero. "Frescos" de
+// alcampo son 2.810 productos que incluyen la frutería, la carnicería, la
+// pescadería, la charcutería, la quesería y el horno: mapearla a un solo cajón es
+// un error de categoría, no un matiz. Medido contra producción: 716 de esos 2.810
+// llevan "queso" en el nombre y estaban catalogados como frutas y verduras. Lo
+// mismo con "Frescos" de ahorramás (62, mezcla de todo) y de bm (17, que son
+// queso fresco al 100%).
+//
+// Estas etiquetas no pueden ir a NO_FIABLE (dejarían 2.889 productos sin cajón,
+// que es peor que hoy) ni a un cajón fijo (es el bug). Se declaran como
+// departamento con un cajón POR DEFECTO, y el cajón real se decide por el nombre
+// del producto.
+//
+// Por qué el defecto es el cajón que ya tenían: hace la pasada segura por
+// construcción. Cualquier producto que las reglas de nombre NO reconozcan queda
+// exactamente donde está hoy, así que el cambio sólo puede mover productos que
+// hemos identificado positivamente. Y como el defecto es `frutas_verduras`, toda
+// la frutería y verdulería acierta sin escribir una sola regla de fruta -- que es
+// justo la lista que no conviene escribir, porque los nombres de fruta aparecen
+// también en la bollería ("Tarta de manzana") y en la charcutería ("Jamón con
+// melón").
+const DEPARTAMENTOS = {
+  alcampo: { "Frescos": "frutas_verduras" },
+  ahorramas: { "Frescos": "frutas_verduras" },
+  bm: { "Frescos": "frutas_verduras" },
+};
+
+// Reglas sobre el NOMBRE del producto. NO son las mismas que POR_PALABRA y no se
+// pueden reutilizar: POR_PALABRA está escrita para etiquetas de pasillo, donde una
+// subcadena suelta basta. Aplicada a nombres de producto se rompe, medido sobre
+// los 2.810 nombres reales de alcampo: "Chipirones" -> bebidas_alcohol (por "ron"),
+// "Sandía de carne naranja" -> carne, "Melocotones rojos" -> cosmética (por "ojos"
+// dentro de "rojos"), "Aguacate" -> bebidas (por "agua"). 1.654 de 2.810
+// clasificados mal.
+//
+// De ahí las dos reglas de escritura de esta tabla:
+//   1. `\b` en todo: el nombre de producto es prosa, no una etiqueta corta, y una
+//      subcadena suelta encuentra cualquier cosa.
+//   2. nada de palabras polisémicas sueltas. "carne" sola la usa la sandía; sólo
+//      entra en frases ("carne picada", "carne de vacuno"). Ante la duda se deja
+//      sin regla, que cae al defecto del departamento.
+//
+// El orden es de más distintivo a más genérico, igual que POR_PALABRA.
+//
+// Se escriben como listas de palabras y no como expresiones a mano por el plural:
+// `\b(croissant)\b` no encuentra "Mini croissants", y escribir cada palabra dos
+// veces multiplica la tabla y se olvida la mitad (pasó con `croissant`, `burrata`
+// y `vieira` en la primera versión). `palabras()` añade el plural español (-s/-es)
+// una sola vez y para todas.
+function palabras(...lista) {
+  return new RegExp(`\\b(?:${lista.join("|")})(?:es|s)?\\b`);
+}
+
+const POR_NOMBRE = [
+  // La ensalada de bolsa va PRIMERO: se llama por sus ingredientes ("Ensalada de
+  // queso de cabra, nueces y manzana"), así que cualquier regla de queso, pollo o
+  // atún se la lleva antes. Es verdura preparada, igual que el pasillo "Lechuga y
+  // ensalada preparada" de mercadona.
+  [palabras("ensalada", "ensaladilla", "brotes tiernos", "canonigo", "rucula", "escarola", "radicchio", "mezclum"), "frutas_verduras"],
+
+  // La hamburguesa va ANTES que el queso: el queso aparece en su nombre como
+  // ingrediente ("Burger meat de vaca madurada con cheddar inglés"), igual que en
+  // la ensalada. Es carne picada, no queso.
+  [palabras("hamburguesa", "burger meat", "burguer meat", "burger", "burguer"), "carne"],
+
+  // Quesos. El caso que reportó el usuario. Van antes que la charcutería porque
+  // "Queso" + un embutido en el mismo nombre es un lote de queso ("Lote: 250gr
+  // Lacón + 250gr Queso Brie") y porque el queso es lo que hay que sacar de aquí.
+  [palabras(
+    "queso", "quesito", "mozzarella", "mozarella", "burrata", "burratina", "parmesano", "parmigiano",
+    "mascarpone", "requeson", "ricotta", "cottage", "manchego", "brie", "camembert", "roquefort",
+    "gorgonzola", "cheddar", "emmental", "emmentaler", "gouda", "edam", "havarti", "feta",
+    "provolone", "gruyere", "idiazabal", "torta del casar", "rulo de cabra", "tetilla", "mahon",
+    "tronchon", "grana padano", "raclette", "fondue", "tete de moine", "babybel", "philadelphia",
+    "tranchete", "tranchette"
+  ), "charcuteria_quesos"],
+
+  // Charcutería: curados y cocidos. En frases donde la palabra es ambigua
+  // ("lomo" solo es también un corte de carne y un lomo de salmón).
+  [palabras(
+    "jamon", "chorizo", "salchichon", "fuet", "mortadela", "salami", "cecina", "sobrasada",
+    "lacon", "chopped", "pate", "foie", "bacon", "panceta ahumada", "lomo embuchado",
+    "cana de lomo", "de bellota", "paleta iberica", "paleta de cebo", "paleta curada",
+    "paleta serrana", "paleta de bodega", "lomo de cebo", "lomo iberico", "panceta curada",
+    "tocino iberico", "guanciale", "espetec", "embutido", "compango", "fiambre",
+    "galantina", "pastrami", "coppa", "bresaola"
+  ), "charcuteria_quesos"],
+
+  // Embutido FRESCO: se cocina, no se lonchea. Va al mismo cajón que el resto de
+  // la carnicería, como ya hace la regla de etiqueta ("embutido fresco" -> carne).
+  [palabras("morcilla", "longaniza", "chistorra", "butifarra", "salchicha", "choricillo", "criollo"), "carne"],
+
+  // Pescadería. Antes que la carnicería: "Lomo de salmón" y "Filete de sardina"
+  // llevan las dos palabras de un corte de carne.
+  [palabras(
+    "salmon", "merluza", "atun", "bacalao", "gamba", "langostino", "cigala", "calamar",
+    "chipiron", "pota", "poton", "pulpo", "pulpito", "sardina", "anchoa", "boqueron", "almeja",
+    "mejillon", "berberecho", "navaja", "sepia", "rodaballo", "lubina", "dorada", "trucha",
+    "lenguado", "rape", "cazon", "emperador", "panga", "tilapia", "caballa", "jurel", "bonito",
+    "palometa", "gallo del norte", "pez espada", "surimi", "kanikama", "mojama", "vieira",
+    "centollo", "necora", "buey de mar", "percebe", "salazon", "gula", "marisco", "pescado",
+    "pescaderia", "krissia", "aguinamar"
+  ), "pescado_marisco"],
+
+  // Carnicería: cortes y aves. Sin "carne" a secas (ver regla 2 de arriba).
+  // Sin `buey` a secas: "Tomate corazón de buey" es un tomate, y "buey de mar" ya
+  // lo coge la pescadería de arriba. Mismo criterio que con "carne".
+  [palabras(
+    "pollo", "pavo", "cerdo", "ternera", "vacuno", "anojo", "cordero", "conejo", "lechazo",
+    "cochinillo", "pato", "codorniz", "pechuga", "muslo", "contramuslo", "jamoncito", "alita",
+    "alas adobadas", "chuleta", "chuleton", "entrecot", "solomillo", "costilla", "costillar",
+    "secreto", "presa iberica", "magro", "jarrete", "morcillo", "rabo", "callos", "higado",
+    "molleja", "paletilla", "carne picada", "carne de vacuno", "carne de ternera",
+    "carne de cerdo", "carne de buey", "carne mechada", "adobado", "adobada", "duroc", "angus",
+    "churrasco"
+  ), "carne"],
+
+  // Horno, bollería y pastelería. Es el obrador de la tienda y en alcampo pesa:
+  // sin este vocabulario quedaban ~200 productos de horno dentro de frutas y
+  // verduras por el defecto del departamento.
+  [palabras(
+    "pan", "barra de pan", "hogaza", "chapata", "chapatina", "baguette", "panecillo", "bollo",
+    "bolleria", "croissant", "napolitana", "ensaimada", "magdalena", "bizcocho", "bizcochada",
+    "palmera", "palmerita", "rosquilla", "berlina", "donut", "dona", "tarta", "tartaleta",
+    "pastel", "pasta almendrada", "hojaldre", "hojaldrito", "brioche", "empanada", "panaderia",
+    "pasteleria", "reposteria", "tostada", "biscote", "colines", "picos", "caracola", "trenza",
+    "roscon", "muffin", "brownie", "galleta", "bocatin", "mollete", "gofre", "pepito",
+    "cana rellena", "flauta", "candeal", "masa madre", "levadura fresca", "obrador"
+  ), "panaderia_bolleria"],
+
+  // Huevos y lácteos frescos. Después del queso a propósito: el queso también es
+  // un lácteo, pero en esta taxonomía tiene su propio cajón con la charcutería.
+  [palabras("huevo", "leche", "yogur", "nata", "mantequilla", "margarina", "cuajada", "kefir", "natilla", "flan", "arroz con leche"), "lacteos_huevos"],
+
+  // Cocina de la tienda: lo que ya viene hecho.
+  [palabras(
+    "pizza", "sushi", "tortilla", "croqueta", "empanadilla", "lasana", "canelon", "hummus",
+    "tabule", "guacamole", "listo para", "precocinado", "wok", "poke", "falafel", "kebab",
+    "sandwich", "bocadillo", "wrap", "paella", "fideua", "tortellini", "ravioli", "pasta fresca",
+    "masa de"
+  ), "platos_preparados"],
+
+  // El membrillo del lineal de frescos es dulce de fruta, no fruta: mismo criterio
+  // que "Frutos secos y fruta desecada" -> snacks, lo distintivo manda.
+  [palabras("membrillo"), "dulces_chocolate"],
+
+  // Las salsas y aliños del lineal de frescos (César, vinagreta, mostaza y miel)
+  // son despensa, igual que los manda la regla de etiqueta `salsa`. No son un
+  // plato preparado.
+  // "alino" y no "aliño": estos patrones se comparan contra texto ya normalizado,
+  // donde la ñ es una n. Es el mismo fallo que documenta POR_PALABRA más arriba.
+  [palabras("salsa", "vinagreta", "alino", "mostaza", "mayonesa", "ketchup", "alioli"), "despensa"],
+];
+
+// Alcampo pega el CORTE al final del nombre, detrás de un guion: "Queso azul -
+// Trozo", "Queso Cheddar rojo MINSTREL - Taco ensalada 1 cm", "Pollo al horno
+// relleno. - Loncha gruesa 3 a 4 mm". No es parte del producto y contamina el
+// match: seis quesos se iban a frutas y verduras porque su corte se llama "taco
+// ENSALADA". Se recorta sólo detrás de una palabra de corte conocida, no de
+// cualquier guion, que en otros nombres sí separa información útil.
+const CORTE = /\s-\s+(taco|loncha|lonchas|trozo|rodaja|rodajas|filete|filetes|pieza|entero|entera|entera limpia|media|medios|cuna|rallado|granel)\b.*$/;
+
+function porNombre(name) {
+  if (!name) return null;
+  const texto = normaliza(name).replace(CORTE, "");
+  for (const [re, destino] of POR_NOMBRE) {
+    if (re.test(texto)) return destino;
+  }
+  return null;
+}
+
+function departamentoDe(supermercado, category) {
+  const tabla = DEPARTAMENTOS[normaliza(supermercado)];
+  if (!tabla || !category) return null;
+  const buscado = normaliza(category);
+  for (const clave of Object.keys(tabla)) {
+    if (normaliza(clave) === buscado) return tabla[clave];
+  }
+  return null;
+}
+
 // Resuelve el cajón de un producto. Devuelve { canonical, aisle, source }, donde
 // `canonical` puede ser un id, FUERA_DE_ALCANCE, NO_FIABLE o null (sin resolver).
 function resolve(product) {
@@ -356,6 +636,17 @@ function resolve(product) {
 
   const porRuta = porPrefijo(product.supermercado, path);
   if (porRuta) return { canonical: porRuta, aisle, source: "path" };
+
+  // El departamento va antes que la etiqueta exacta: la etiqueta existe (es
+  // "Frescos") pero no es un pasillo, así que resolverla por etiqueta es
+  // precisamente el bug. Cuando el nombre no dice nada, cae al defecto declarado,
+  // que es el mismo cajón que daba la etiqueta.
+  const departamento = departamentoDe(product.supermercado, product.category);
+  if (departamento) {
+    const porElNombre = porNombre(product.name);
+    if (porElNombre) return { canonical: porElNombre, aisle, source: "name" };
+    return { canonical: departamento, aisle, source: "category" };
+  }
 
   const etiqueta = porEtiqueta(product.supermercado, product.category);
   if (etiqueta) return { canonical: etiqueta, aisle, source: "category" };
@@ -408,6 +699,11 @@ function canonicaPorId(id) {
 
 module.exports = {
   CANONICAS,
+  DEPARTAMENTOS,
+  POR_NOMBRE,
+  PASILLOS_SINONIMOS,
+  clavePasillo,
+  nombrePasillo,
   FUERA_DE_ALCANCE,
   NO_FIABLE,
   FUENTE_NO_FIABLE,

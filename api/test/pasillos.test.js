@@ -72,9 +72,14 @@ const contar = (filters, opts) => productModel.countByAisle(filters, opts).total
 test("una cadena devuelve sus pasillos con el número de productos", () => {
   const r = pasillos({ supermercado: "mercadona" });
   assert.deepStrictEqual(r, [
-    { supermercado: "mercadona", aisle: "Leche y bebidas vegetales", total: 12 },
-    { supermercado: "mercadona", aisle: "Verdura", total: 8 },
-    { supermercado: "mercadona", aisle: "Helados", total: 5 },
+    { supermercado: "mercadona", aisle: "Leche y bebidas vegetales", total: 12,
+      aisle_key: "lech y bebida vegetal", aisle_canonical: "Leche y bebidas vegetales" },
+    // "Verdura" es un pasillo genérico de fruta y verdura: su nombre canónico está
+    // escrito a mano, así que no depende de la ortografía de esta cadena.
+    { supermercado: "mercadona", aisle: "Verdura", total: 8,
+      aisle_key: "fruta y verdura", aisle_canonical: "Frutas y verduras" },
+    { supermercado: "mercadona", aisle: "Helados", total: 5,
+      aisle_key: "helado", aisle_canonical: "Helados" },
   ]);
 });
 
@@ -141,7 +146,10 @@ test("el total sí respeta min_total, porque ahí cambia el conjunto", () => {
 test("las filas sin categoría no aparecen como pasillo", () => {
   // aldi tiene 103 productos sin categoría en producción.
   const r = pasillos({ supermercado: "aldi" });
-  assert.deepStrictEqual(r, [{ supermercado: "aldi", aisle: "Limpieza y hogar", total: 2 }]);
+  assert.deepStrictEqual(r, [
+    { supermercado: "aldi", aisle: "Limpieza y hogar", total: 2,
+      aisle_key: "limpieza y hogar", aisle_canonical: "Limpieza y hogar" },
+  ]);
 });
 
 test("una cadena que no existe devuelve lista vacía, no error", () => {
@@ -151,7 +159,8 @@ test("una cadena que no existe devuelve lista vacía, no error", () => {
 test("una cadena con la etiqueta inservible devuelve ese único pasillo", () => {
   // carrefour dice "Bebidas" para todo su catálogo: es la verdad de los datos.
   assert.deepStrictEqual(pasillos({ supermercado: "carrefour" }), [
-    { supermercado: "carrefour", aisle: "Bebidas", total: 4 },
+    { supermercado: "carrefour", aisle: "Bebidas", total: 4,
+      aisle_key: "bebida", aisle_canonical: "Bebidas" },
   ]);
 });
 
@@ -177,13 +186,15 @@ test("cada fila lleva siempre la cadena, aunque se haya filtrado por ella", () =
 
 test("se pueden pedir sólo los pasillos que tienen novedades", () => {
   assert.deepStrictEqual(pasillos({ supermercado: "mercadona", is_new: 1 }), [
-    { supermercado: "mercadona", aisle: "Helados", total: 5 },
+    { supermercado: "mercadona", aisle: "Helados", total: 5,
+      aisle_key: "helado", aisle_canonical: "Helados" },
   ]);
 });
 
 test("y sólo los que tienen ofertas", () => {
   assert.deepStrictEqual(pasillos({ is_offer: 1 }), [
-    { supermercado: "ahorramas", aisle: "Zumos", total: 2 },
+    { supermercado: "ahorramas", aisle: "Zumos", total: 2,
+      aisle_key: "zumo", aisle_canonical: "Zumos" },
   ]);
 });
 
@@ -232,7 +243,9 @@ test("el endpoint devuelve la forma acordada", () => {
   assert.strictEqual(res.statusCode, 200);
   assert.deepStrictEqual(Object.keys(res.body), ["total", "limit", "min_total", "pasillos"]);
   assert.strictEqual(res.body.total, 3);
-  assert.deepStrictEqual(Object.keys(res.body.pasillos[0]), ["supermercado", "aisle", "total"]);
+  assert.deepStrictEqual(Object.keys(res.body.pasillos[0]), [
+    "supermercado", "aisle", "total", "aisle_key", "aisle_canonical",
+  ]);
 });
 
 test("min_total y limit llegan desde la query", () => {
@@ -354,8 +367,10 @@ test("varios category también acotan el conteo de pasillos", () => {
   // buildWhere es compartido, así que /pasillos hereda el filtro sin tocarlo.
   const r = productModel.countByAisle({ category: ["Fruta", "Frutas"] }).pasillos;
   assert.deepStrictEqual(r, [
-    { supermercado: "dia", aisle: "Frutas", total: 4 },
-    { supermercado: "mercadona", aisle: "Fruta", total: 3 },
+    { supermercado: "dia", aisle: "Frutas", total: 4,
+      aisle_key: "fruta y verdura", aisle_canonical: "Frutas y verduras" },
+    { supermercado: "mercadona", aisle: "Fruta", total: 3,
+      aisle_key: "fruta y verdura", aisle_canonical: "Frutas y verduras" },
   ]);
 });
 

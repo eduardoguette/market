@@ -75,6 +75,11 @@ async function main() {
       // string con separador porque los nombres de categoría de lidl llevan "/".
       ...categorias.columnsFor({
         supermercado,
+        // `name` hace falta para la cuarta pasada del mapa: cuando la etiqueta es un
+        // departamento y no un pasillo ("Frescos" de alcampo), el cajón lo decide el
+        // nombre del producto. Sin pasarlo, el ingest deja esas filas en el defecto
+        // del departamento y el bug vuelve en la siguiente carga.
+        name,
         category: text(p.category),
         category_path: Array.isArray(p.category_path) ? p.category_path : null,
       }),

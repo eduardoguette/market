@@ -1,7 +1,7 @@
 const db = require("../config/db");
 const { parseSearchQuery, ftsExpression, sizeBand } = require("../lib/search");
 const { productSize, normalizeName, unitAliases } = require("../lib/matching");
-const { CANONICAS, FUENTE_NO_FIABLE } = require("../lib/categories");
+const { CANONICAS, FUENTE_NO_FIABLE, clavePasillo, nombrePasillo } = require("../lib/categories");
 
 const FTS_JOIN = "JOIN products_fts ON products_fts.rowid = p.id";
 
@@ -247,7 +247,56 @@ function countByAisle(filters = {}, { minTotal = 0, limit } = {}) {
   const sql = `${agrupado} ORDER BY total DESC, aisle ${limit ? "LIMIT ?" : ""}`;
   if (limit) params.push(limit);
 
-  return { total, pasillos: db.prepare(sql).all(...params) };
+  return { total, pasillos: conPasilloCanonico(db.prepare(sql).all(...params)) };
+}
+
+// Añade a cada fila la identidad canónica del pasillo: `aisle_key` (dos filas con
+// la misma clave son el mismo pasillo) y `aisle_canonical` (el nombre que se pinta).
+//
+// Se calcula acá y no en el cliente porque es taxonomía, no presentación: las nueve
+// cadenas escriben el mismo pasillo distinto ("Fruta" en mercadona, "Frutas" en dia
+// y aldi, "Fruta y verdura" otra vez en mercadona) y quien consume la API no puede
+// saber cuáles son equivalentes sin ver el catálogo entero.
+//
+// Los campos son ADITIVOS: `aisle` sigue siendo el nombre crudo de la cadena, que
+// es lo que hay que mandar a `/products?category=`, así que nada de lo que ya
+// consume el endpoint cambia de significado.
+//
+// El nombre sale de PASILLOS_SINONIMOS cuando está escrito a mano, y si no del
+// pasillo con MÁS productos detrás dentro de la clave (empate -> alfabético, para
+// que el orden no dependa del orden en que llegaron las filas). Entre "Frutas" y
+// "Fruta" no hay una correcta, hay una mayoritaria.
+//
+// Con `limit`, la mayoría se calcula sobre las filas devueltas y no sobre todas.
+// Asumido: `limit` recorta la cola de pasillos de 1-2 productos, que por definición
+// no gana ninguna mayoría.
+function conPasilloCanonico(filas) {
+  const porClave = new Map();
+  for (const fila of filas) {
+    const key = clavePasillo(fila.aisle);
+    if (!key) continue;
+    const acumulado = porClave.get(key) || new Map();
+    acumulado.set(fila.aisle, (acumulado.get(fila.aisle) || 0) + fila.total);
+    porClave.set(key, acumulado);
+  }
+
+  const nombrePorClave = new Map();
+  for (const [key, totales] of porClave) {
+    const escrito = nombrePasillo([...totales.keys()][0]);
+    if (escrito) {
+      nombrePorClave.set(key, escrito);
+      continue;
+    }
+    nombrePorClave.set(
+      key,
+      [...totales.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"))[0][0]
+    );
+  }
+
+  return filas.map((fila) => {
+    const key = clavePasillo(fila.aisle);
+    return { ...fila, aisle_key: key, aisle_canonical: key ? nombrePorClave.get(key) : null };
+  });
 }
 
 function findById(id) {

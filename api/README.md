@@ -32,11 +32,35 @@ hojas descriptivas, bm hojas que no se describen solas (`Seco`, `Envasado`, `Al
 corte`) y ahorramás mezcla pasillos con campañas (`Black Friday`, `Día del Padre`,
 `Mondelez`). Comparar `Alimentación` con `Sazonadores` es un error de categoría.
 
-`src/lib/categories.js` traduce todo eso a **24 cajones canónicos** en tres pasadas
-—ruta por prefijo más largo, etiqueta exacta, palabra clave sobre la etiqueta— y con
-tres salidas: un cajón, `FUERA_DE_ALCANCE`, o `NO_FIABLE` (la etiqueta miente y hay
-que mirar el nombre). Lo que no resuelve ninguna pasada queda **sin cajón**, que es
-honesto y visible.
+`src/lib/categories.js` traduce todo eso a **24 cajones canónicos** en cuatro pasadas
+—ruta por prefijo más largo, etiqueta exacta, **nombre del producto dentro de un
+departamento**, palabra clave sobre la etiqueta— y con tres salidas: un cajón,
+`FUERA_DE_ALCANCE`, o `NO_FIABLE` (la etiqueta miente y hay que mirar el nombre). Lo
+que no resuelve ninguna pasada queda **sin cajón**, que es honesto y visible.
+
+#### Departamentos: cuando la etiqueta no es un pasillo
+
+`Frescos` de alcampo son 2.810 productos e incluye la frutería, la carnicería, la
+pescadería, la charcutería, la quesería y el horno. Mapearla a un solo cajón metía
+**716 quesos dentro de frutas y verduras**; lo mismo con `Frescos` de ahorramás (62,
+mezcla de todo) y de bm (17, que es queso fresco al 100%).
+
+Esas etiquetas se declaran en `DEPARTAMENTOS` con un cajón **por defecto**, y el cajón
+real lo decide `POR_NOMBRE` sobre el nombre del producto (`category_source = "name"`).
+El defecto es el cajón que ya tenían, así que la pasada es **segura por construcción**:
+lo que las reglas no reconocen se queda donde estaba. Reparto medido de los 2.889:
+
+```
+charcuteria_quesos 1387   pescado_marisco    315   dulces_chocolate  10
+carne               552   panaderia_bolleria 136   lacteos_huevos     5
+frutas_verduras     469   platos_preparados   12   despensa           3
+```
+
+`POR_NOMBRE` **no** es `POR_PALABRA` y no se puede reutilizar: aplicada a nombres de
+producto, la tabla de etiquetas manda "Chipirones" a bebidas alcohólicas (por "ron"),
+"Sandía de carne naranja" a carne y "Aguacate" a bebidas — 1.654 de 2.810 mal. Las
+reglas de nombre van con `\b`, sin palabras polisémicas sueltas, y se compilan con el
+plural (`\b(croissant)\b` no encuentra "croissants").
 
 ```
 GET /categorias
@@ -83,8 +107,22 @@ Para poder navegar una cadena sin escribir nada en el buscador.
 
 ```json
 { "total": 149, "limit": null, "min_total": 0,
-  "pasillos": [ { "supermercado": "mercadona", "aisle": "Leche y bebidas vegetales", "total": 118 } ] }
+  "pasillos": [ { "supermercado": "mercadona", "aisle": "Fruta", "total": 54,
+                  "aisle_key": "fruta y verdura", "aisle_canonical": "Frutas y verduras" } ] }
 ```
+
+**`aisle_key` y `aisle_canonical`: el mismo pasillo escrito distinto.** Las nueve
+cadenas nombran igual pasillo de nueve formas: `Fruta` (mercadona, 54), `Frutas` (dia
+86 + aldi 3) y `Fruta y verdura` (mercadona, 59) eran cuatro filas para el mismo
+pasillo. Dos filas con el mismo `aisle_key` **son el mismo pasillo** y se pintan con
+`aisle_canonical`. Se resuelve en dos niveles: una clave mecánica (sin acentos,
+minúsculas, singular/plural palabra por palabra, que no puede equivocarse) y una tabla
+de sinónimos escrita a mano (`PASILLOS_SINONIMOS`) para los nombres que significan lo
+mismo sin parecerse. No hay jerarquía: `Tomate` y `Naranja` siguen siendo pasillos
+propios, porque esa granularidad es lo que aporta el nivel de pasillo sobre el de cajón.
+
+Los dos campos son **aditivos**: `aisle` sigue siendo el nombre crudo de la cadena y es
+el que hay que mandar a `/products?category=`.
 
 `total` son los pasillos que existen, no los que se devuelven: `limit` sólo recorta
 la lista, igual que en `/products`. `min_total` sí cambia el `total`, porque ahí lo

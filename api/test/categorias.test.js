@@ -94,6 +94,102 @@ test("los frutos secos son aperitivo, no fruta", () => {
   assert.strictEqual(resolver("bm", "Champiñones").canonical, "frutas_verduras");
 });
 
+// --- cuarta pasada: el nombre, dentro de un departamento ------------------
+
+const enFrescos = (supermercado, name) =>
+  categorias.resolve({ supermercado, category: "Frescos", name });
+
+test("\"Frescos\" es un departamento y lo decide el nombre del producto", () => {
+  // El bug que reportó el usuario: "Frescos" de alcampo son 2.810 productos que
+  // incluyen la frutería, la carnicería, la pescadería, la charcutería, la
+  // quesería y el horno. Mapearla entera a frutas y verduras metía 716 quesos ahí.
+  assert.strictEqual(enFrescos("alcampo", "GALBANI Queso mozzarella en lonchas 100 g.").canonical, "charcuteria_quesos");
+  assert.strictEqual(enFrescos("alcampo", "SAINT AGUR Queso azul - Trozo").canonical, "charcuteria_quesos");
+  assert.strictEqual(enFrescos("bm", "Queso fresco de Burgos al corte").canonical, "charcuteria_quesos");
+  assert.strictEqual(enFrescos("ahorramas", "Queso rulo de cabra El Pastor 140g").canonical, "charcuteria_quesos");
+  assert.strictEqual(enFrescos("alcampo", "Lomo de salmón.").canonical, "pescado_marisco");
+  assert.strictEqual(enFrescos("alcampo", "Paletilla entera de cordero").canonical, "carne");
+  assert.strictEqual(enFrescos("alcampo", "Hogaza de pan de centeno (70%) 400 g.").canonical, "panaderia_bolleria");
+  assert.strictEqual(enFrescos("alcampo", "LEYENDA IBÉRICA Salchichón ibérico de cebo 50 g.").canonical, "charcuteria_quesos");
+  // Y la fuente lo declara, para que se pueda auditar de dónde salió.
+  assert.strictEqual(enFrescos("bm", "Queso ricotta 250 g").source, "name");
+});
+
+test("el departamento cae a su cajón por defecto, no a null", () => {
+  // La pasada es segura por construcción: lo que las reglas de nombre no
+  // reconocen se queda donde está hoy. Si cayera a null, el cambio dejaría 2.889
+  // productos fuera de la navegación, que es peor que el bug.
+  const r = enFrescos("alcampo", "Melón Waikiki al peso.");
+  assert.strictEqual(r.canonical, "frutas_verduras");
+  assert.strictEqual(r.source, "category");
+  assert.strictEqual(enFrescos("ahorramas", "Gazpacho Don Simón 1l").canonical, "frutas_verduras");
+});
+
+test("las reglas de nombre no se pueden escribir como las de etiqueta", () => {
+  // Los cuatro fallos reales que da POR_PALABRA aplicada a nombres de producto, y
+  // que POR_NOMBRE tiene que no repetir: subcadena suelta y palabra polisémica.
+  assert.strictEqual(enFrescos("alcampo", "Chipirones.").canonical, "pescado_marisco"); // no "ron"
+  assert.strictEqual(enFrescos("alcampo", "Sandía de carne naranja al peso.").canonical, "frutas_verduras");
+  assert.strictEqual(enFrescos("alcampo", "Melocotones rojos, bandeja 1 kg.").canonical, "frutas_verduras");
+  assert.strictEqual(enFrescos("alcampo", "CALIDAD EXTRA Aguacate al peso.").canonical, "frutas_verduras");
+  assert.strictEqual(enFrescos("alcampo", "Tomate corazón de buey al peso.").canonical, "frutas_verduras");
+});
+
+test("el ingrediente no decide: la ensalada y la hamburguesa ganan al queso", () => {
+  assert.strictEqual(enFrescos("alcampo", "FLORETTE Ensalada de queso de cabra, nueces y manzana").canonical, "frutas_verduras");
+  assert.strictEqual(enFrescos("alcampo", "PUJOL'S Burger meat de vaca madurada con cheddar inglés").canonical, "carne");
+});
+
+test("el corte que alcampo pega al nombre no cuenta", () => {
+  // "- Taco ensalada 1 cm" es la forma de corte, no el producto: sin recortarlo,
+  // seis quesos se iban a frutas y verduras por la palabra "ensalada".
+  assert.strictEqual(enFrescos("alcampo", "Queso Cheddar rojo MINSTREL - Taco ensalada 1 cm").canonical, "charcuteria_quesos");
+});
+
+test("el plural no se escapa de las reglas de nombre", () => {
+  // `\b(croissant)\b` no encuentra "croissants": por eso las reglas se compilan
+  // con el plural en vez de escribirse a mano.
+  assert.strictEqual(enFrescos("alcampo", "Mini croissants bañados surtidos 9 uds.").canonical, "panaderia_bolleria");
+  assert.strictEqual(enFrescos("alcampo", "ZANETTI Burratinas 4x50 g.").canonical, "charcuteria_quesos");
+});
+
+test("el departamento sólo aplica a las cadenas declaradas", () => {
+  // mercadona no tiene "Frescos"; si un día lo trae, hay que declararlo.
+  assert.strictEqual(
+    categorias.resolve({ supermercado: "mercadona", category: "Frescos", name: "Queso" }).canonical,
+    null
+  );
+});
+
+// --- pasillo canónico -----------------------------------------------------
+
+test("el mismo pasillo escrito distinto tiene la misma clave", () => {
+  // El segundo problema reportado: "Fruta" (mercadona, 54), "Frutas" (dia 86 +
+  // aldi 3) y "Fruta y verdura" (mercadona, 59) son el mismo pasillo en cuatro
+  // filas distintas.
+  const clave = categorias.clavePasillo("Fruta");
+  for (const nombre of ["Frutas", "Fruta y verdura", "Frutas y verduras", "Verdura", "Verduras", "Verduras y hortalizas", "Fruta variada", "Fruta de temporada"]) {
+    assert.strictEqual(categorias.clavePasillo(nombre), clave, `"${nombre}"`);
+    assert.strictEqual(categorias.nombrePasillo(nombre), "Frutas y verduras", `"${nombre}"`);
+  }
+});
+
+test("el singular y el plural caen juntos sin escribir nada a mano", () => {
+  assert.strictEqual(categorias.clavePasillo("Yogur líquido"), categorias.clavePasillo("Yogures líquidos"));
+  assert.strictEqual(categorias.clavePasillo("Arroz"), categorias.clavePasillo("Arroces"));
+  assert.strictEqual(categorias.clavePasillo("Bollería envasada"), categorias.clavePasillo("Bolleria Envasada"));
+});
+
+test("los pasillos específicos NO se fusionan con el genérico", () => {
+  // Unir "Tomate" con "Frutas y verduras" sería tirar la granularidad que es justo
+  // lo que aporta el nivel de pasillo sobre el de cajón.
+  const generico = categorias.clavePasillo("Fruta");
+  for (const nombre of ["Tomate", "Naranja", "Lechuga y ensalada preparada", "Champiñones y setas"]) {
+    assert.notStrictEqual(categorias.clavePasillo(nombre), generico, `"${nombre}"`);
+    assert.strictEqual(categorias.nombrePasillo(nombre), null, `"${nombre}"`);
+  }
+});
+
 // --- las tres salidas -----------------------------------------------------
 
 test("las campañas comerciales no son un pasillo", () => {
