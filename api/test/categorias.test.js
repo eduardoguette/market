@@ -267,6 +267,117 @@ test("\"Cerdo y cochinillo\" es el mismo pasillo que \"Cerdo\"", () => {
   );
 });
 
+// --- fusión de pasillos: aves, conejo, panadería y cereales ---------------
+
+test("el nombre de un DEPARTAMENTO no es un nombre de pasillo", () => {
+  // Desde que los departamentos se resuelven por el nombre del producto, su etiqueta
+  // aparece como fila en cada cajón donde cae alguno: "Desayuno y Merienda" (224),
+  // "Alimentación" (215) y "Frescos" (137) eran tres de las cinco filas más grandes
+  // de panadería, y ninguna dice qué hay dentro. Se pliegan al nombre del cajón.
+  assert.strictEqual(categorias.nombrePasillo("Frescos", "panaderia_bolleria"), "Panadería y bollería");
+  assert.strictEqual(categorias.nombrePasillo("Desayuno y Merienda", "panaderia_bolleria"), "Panadería y bollería");
+  assert.strictEqual(categorias.nombrePasillo("Alimentación", "carne"), "Carne");
+  assert.strictEqual(categorias.nombrePasillo("Frescos", "frutas_verduras"), "Frutas y verduras");
+  // Y la fila genérica de la cadena cae en la MISMA clave, que es el objetivo:
+  // "Carnes" de dia y los "Frescos" de alcampo son la misma fila.
+  assert.strictEqual(
+    categorias.clavePasillo("Frescos", "carne"),
+    categorias.clavePasillo("Carnes", "carne")
+  );
+  // Sin cajón no se puede plegar: no se sabe a qué nombre.
+  assert.strictEqual(categorias.nombrePasillo("Frescos"), null);
+});
+
+test("la pollería son seis nombres del mismo pasillo, el conejo NO", () => {
+  const p = (n) => categorias.nombrePasillo(n, "carne");
+  assert.strictEqual(p("Aves y pollo"), "Aves y pollo");
+  assert.strictEqual(p("Aves de España"), "Aves y pollo");
+  assert.strictEqual(p("Pollo"), "Aves y pollo");
+  assert.strictEqual(p("Pollo airfryer"), "Aves y pollo");
+  assert.strictEqual(p("Conejo, pavo y otras aves"), "Aves y pollo");
+  assert.strictEqual(p("Pollo y pavo"), "Aves y pollo");
+  // "Conejo y cordero" NO se fusiona, y es el hallazgo de la auditoría: se parece a
+  // "Cerdo y cochinillo" pero no lo es. De sus 9 productos, 6 son de CORDERO
+  // (chuletas de palo y riñonada, hígado, garretas, burger al romero...), así que es
+  // un pasillo mixto de dos especies, no otro nombre para el del conejo.
+  assert.strictEqual(p("Conejo y cordero"), null);
+  assert.strictEqual(p("Conejo"), null);
+  assert.notStrictEqual(
+    categorias.clavePasillo("Conejo y cordero", "carne"),
+    categorias.clavePasillo("Conejo", "carne")
+  );
+  // "Carne y pollo" tampoco: son empanados de marca, no la pollería.
+  assert.strictEqual(p("Carne y pollo"), null);
+  // La casquería sí: "Arreglos" y "Casquería y arreglos" son el mismo pasillo.
+  assert.strictEqual(p("Arreglos"), "Casquería y arreglos");
+  assert.strictEqual(p("Casquería y arreglos"), "Casquería y arreglos");
+});
+
+test("panadería: se fusiona la redacción, no el tipo de producto", () => {
+  const p = (n) => categorias.nombrePasillo(n, "panaderia_bolleria");
+  assert.strictEqual(p("Pan de horno"), "Pan");
+  assert.strictEqual(p("Pan de baguette"), "Pan");
+  // Las cinco variantes de pan de molde son la misma compra: mercadona tiene UNA
+  // fila genérica que las cubre todas.
+  assert.strictEqual(p("Pan de molde blanco"), "Pan de molde");
+  assert.strictEqual(p("Pan de molde integral"), "Pan de molde");
+  assert.strictEqual(p("Pan de molde multicereales y semillas"), "Pan de molde");
+  // "Pan de molde y tostado" es pan de molde: el molde decide antes que el tostado.
+  assert.strictEqual(p("Pan de molde y tostado"), "Pan de molde");
+  assert.strictEqual(p("Pan tostado, barritas y biscotes"), "Pan tostado y biscotes");
+  // ...y el tostado antes que la repostería, aunque el pan rallado sea repostería.
+  assert.strictEqual(p("Pan tostado y rallado"), "Pan tostado y biscotes");
+  assert.strictEqual(p("Harinas, levadura y pan rallado"), "Harinas y repostería");
+  assert.strictEqual(p("Picos, rosquilletas y picatostes"), "Picos, colines y picatostes");
+  assert.strictEqual(p("Colines, picos y crackers"), "Picos, colines y picatostes");
+  assert.strictEqual(p("Pasteleria"), "Tartas y pasteles");
+  assert.strictEqual(p("Tartas , contesas y otros"), "Tartas y pasteles");
+  // La bollería del día y la de horno son lo mismo; la ENVASADA no, y mercadona
+  // tiene las dos como pasillos distintos (igual que "Agua con gas"/"Agua sin gas").
+  assert.strictEqual(p("Bollería de horno"), "Bollería");
+  assert.strictEqual(p("Bollería del día"), "Bollería");
+  assert.strictEqual(p("Croissants, ensaimadas y napolitanas"), "Bollería");
+  assert.strictEqual(p("Bollería envasada"), "Bollería envasada");
+  assert.notStrictEqual(
+    categorias.clavePasillo("Bollería envasada", "panaderia_bolleria"),
+    categorias.clavePasillo("Bollería de horno", "panaderia_bolleria")
+  );
+  // Guardas: llevan palabra de panadería y no son el pasillo.
+  assert.strictEqual(p("Galletas tostadas"), null);
+  assert.strictEqual(p("Maíz tostado"), null);
+  assert.strictEqual(p("Moldes y recipientes"), null);
+});
+
+test("cereales y galletas: la misma galleta sí, otra galleta no", () => {
+  const p = (n) => categorias.nombrePasillo(n, "cereales_galletas");
+  assert.strictEqual(p("Galletas clásicas"), "Galletas");
+  assert.strictEqual(p("Galletas y pastas"), "Galletas");
+  assert.strictEqual(p("Cereales clásicos"), "Cereales");
+  assert.strictEqual(p("Cereales integrales, avena y muesli"), "Cereales integrales y muesli");
+  assert.strictEqual(p("Wafer y barquillos"), "Barquillos y wafer");
+  // "Galletas de avena e integrales" es galleta, no muesli: las reglas de galleta
+  // van antes que las de cereal integral.
+  assert.strictEqual(p("Galletas de avena e integrales"), "Galletas integrales");
+  // Y estas tres son productos distintos, no tres formas de escribir "galleta".
+  assert.strictEqual(p("Galletas rellenas"), "Galletas rellenas");
+  assert.strictEqual(p("Galletas saladas"), "Galletas saladas");
+  assert.strictEqual(p("Galletas María"), "Galletas María");
+  assert.notStrictEqual(
+    categorias.clavePasillo("Galletas rellenas", "cereales_galletas"),
+    categorias.clavePasillo("Galletas saladas", "cereales_galletas")
+  );
+});
+
+test("en lidl la regla de pasillo mira la hoja, no la rama", () => {
+  // lidl manda la ruta entera separada por "/". El tramo padre habla del
+  // departamento y arrastraba al hijo: "Carne y aves" mandaba los embutidos y la
+  // carne de vacuno a la pollería.
+  const p = (n) => categorias.nombrePasillo(n, "carne");
+  assert.strictEqual(p("Comida y cerca de la comida/Carne y aves/Aves de corral"), "Aves y pollo");
+  assert.strictEqual(p("Comida y cerca de la comida/Carne y aves/Embutidos y fiambres"), null);
+  assert.strictEqual(p("Comida y cerca de la comida/Carne y aves/Carne de vacuno"), null);
+});
+
 // --- pasillo canónico -----------------------------------------------------
 
 const FV = "frutas_verduras";
