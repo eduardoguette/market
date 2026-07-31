@@ -72,12 +72,15 @@ const contar = (filters, opts) => productModel.countByAisle(filters, opts).total
 test("una cadena devuelve sus pasillos con el número de productos", () => {
   const r = pasillos({ supermercado: "mercadona" });
   assert.deepStrictEqual(r, [
+    // La clave es una bolsa de palabras ordenada, sin partículas: por eso "lech" va
+    // antes que "vegetal" y la "y" no aparece.
     { supermercado: "mercadona", aisle: "Leche y bebidas vegetales", total: 12,
-      aisle_key: "lech y bebida vegetal", aisle_canonical: "Leche y bebidas vegetales" },
-    // "Verdura" es un pasillo genérico de fruta y verdura: su nombre canónico está
-    // escrito a mano, así que no depende de la ortografía de esta cadena.
+      aisle_key: "bebida lech vegetal", aisle_canonical: "Leche y bebidas vegetales" },
+    // Sin filtro de cajón no se aplica la fusión por palabra clave, así que "Verdura"
+    // se queda con su propio nombre. Con `categoria_canonica=frutas_verduras` sí se
+    // fusiona: ver el test de abajo.
     { supermercado: "mercadona", aisle: "Verdura", total: 8,
-      aisle_key: "fruta y verdura", aisle_canonical: "Frutas y verduras" },
+      aisle_key: "verdura", aisle_canonical: "Verdura" },
     { supermercado: "mercadona", aisle: "Helados", total: 5,
       aisle_key: "helado", aisle_canonical: "Helados" },
   ]);
@@ -148,7 +151,7 @@ test("las filas sin categoría no aparecen como pasillo", () => {
   const r = pasillos({ supermercado: "aldi" });
   assert.deepStrictEqual(r, [
     { supermercado: "aldi", aisle: "Limpieza y hogar", total: 2,
-      aisle_key: "limpieza y hogar", aisle_canonical: "Limpieza y hogar" },
+      aisle_key: "hogar limpieza", aisle_canonical: "Limpieza y hogar" },
   ]);
 });
 
@@ -367,10 +370,12 @@ test("varios category también acotan el conteo de pasillos", () => {
   // buildWhere es compartido, así que /pasillos hereda el filtro sin tocarlo.
   const r = productModel.countByAisle({ category: ["Fruta", "Frutas"] }).pasillos;
   assert.deepStrictEqual(r, [
+    // Sin cajón, "Fruta" y "Frutas" ya caen juntas por la clave mecánica (el plural),
+    // y el nombre es el mayoritario de las dos.
     { supermercado: "dia", aisle: "Frutas", total: 4,
-      aisle_key: "fruta y verdura", aisle_canonical: "Frutas y verduras" },
+      aisle_key: "fruta", aisle_canonical: "Frutas" },
     { supermercado: "mercadona", aisle: "Fruta", total: 3,
-      aisle_key: "fruta y verdura", aisle_canonical: "Frutas y verduras" },
+      aisle_key: "fruta", aisle_canonical: "Frutas" },
   ]);
 });
 

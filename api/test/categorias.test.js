@@ -163,31 +163,105 @@ test("el departamento sólo aplica a las cadenas declaradas", () => {
 
 // --- pasillo canónico -----------------------------------------------------
 
-test("el mismo pasillo escrito distinto tiene la misma clave", () => {
-  // El segundo problema reportado: "Fruta" (mercadona, 54), "Frutas" (dia 86 +
-  // aldi 3) y "Fruta y verdura" (mercadona, 59) son el mismo pasillo en cuatro
-  // filas distintas.
-  const clave = categorias.clavePasillo("Fruta");
-  for (const nombre of ["Frutas", "Fruta y verdura", "Frutas y verduras", "Verdura", "Verduras", "Verduras y hortalizas", "Fruta variada", "Fruta de temporada"]) {
-    assert.strictEqual(categorias.clavePasillo(nombre), clave, `"${nombre}"`);
-    assert.strictEqual(categorias.nombrePasillo(nombre), "Frutas y verduras", `"${nombre}"`);
-  }
-});
+const FV = "frutas_verduras";
 
 test("el singular y el plural caen juntos sin escribir nada a mano", () => {
   assert.strictEqual(categorias.clavePasillo("Yogur líquido"), categorias.clavePasillo("Yogures líquidos"));
   assert.strictEqual(categorias.clavePasillo("Arroz"), categorias.clavePasillo("Arroces"));
   assert.strictEqual(categorias.clavePasillo("Bollería envasada"), categorias.clavePasillo("Bolleria Envasada"));
+  assert.strictEqual(categorias.clavePasillo("Fruta"), categorias.clavePasillo("Frutas"));
 });
 
-test("los pasillos específicos NO se fusionan con el genérico", () => {
-  // Unir "Tomate" con "Frutas y verduras" sería tirar la granularidad que es justo
-  // lo que aporta el nivel de pasillo sobre el de cajón.
-  const generico = categorias.clavePasillo("Fruta");
-  for (const nombre of ["Tomate", "Naranja", "Lechuga y ensalada preparada", "Champiñones y setas"]) {
-    assert.notStrictEqual(categorias.clavePasillo(nombre), generico, `"${nombre}"`);
-    assert.strictEqual(categorias.nombrePasillo(nombre), null, `"${nombre}"`);
+test("el ORDEN de las palabras no distingue un pasillo", () => {
+  // 20 familias del catálogo, en 13 cajones, son la misma etiqueta permutada. No hay
+  // ninguna cadena para la que "Salazones y ahumados" signifique otra cosa que
+  // "Ahumados y salazones".
+  const pares = [
+    ["Ahumados y salazones", "Salazones y ahumados"],
+    ["Sepia, pulpo y calamar", "Pulpo, calamar y sepia"],
+    ["Caldos y sopas", "Sopa y caldo"],
+    ["Barritas de cereales", "Cereales y barritas"],
+    ["Embutido curado", "Curados y embutidos"],
+    ["Pastas y arroces", "Arroz y pasta"],
+    ["Champiñones y setas", "Setas y champiñones"],
+    // "Otras" es relleno: seis cadenas lo usan para el cajón de sobras de un pasillo.
+    ["Especias", "Otras especias"],
+    ["Insecticidas", "Otros insecticidas"],
+  ];
+  for (const [a, b] of pares) {
+    assert.strictEqual(categorias.clavePasillo(a), categorias.clavePasillo(b), `${a} / ${b}`);
   }
+});
+
+test("\"con\" y \"sin\" NO son partículas: distinguen el producto", () => {
+  // Es el contraejemplo que acota la regla de arriba. Si se ignoraran como se ignora
+  // la "y", el agua con gas y el agua sin gas serían una sola fila.
+  assert.notStrictEqual(
+    categorias.clavePasillo("Agua con gas", "bebidas"),
+    categorias.clavePasillo("Agua sin gas", "bebidas")
+  );
+  assert.notStrictEqual(categorias.clavePasillo("Para carne", "carne"), categorias.clavePasillo("Carnes", "carne"));
+});
+
+test("dentro de un cajón, la fruta y la verdura se fusionan por palabra clave", () => {
+  // El problema reportado: dentro de "Frutas y verduras" el usuario veía 87 filas de
+  // pasillo, 46 de una sola cadena y 42 con 15 productos o menos.
+  const frutas = categorias.clavePasillo("Fruta", FV);
+  for (const nombre of ["Frutas", "Fruta variada", "Fruta de temporada", "Manzanas, peras y uvas", "Naranja", "Plátanos y uvas", "Manzana", "Fresas y frutos rojos", "Fruta de hueso"]) {
+    assert.strictEqual(categorias.clavePasillo(nombre, FV), frutas, `"${nombre}"`);
+    assert.strictEqual(categorias.nombrePasillo(nombre, FV), "Frutas", `"${nombre}"`);
+  }
+
+  const verduras = categorias.clavePasillo("Verdura", FV);
+  for (const nombre of ["Verduras", "Verduras y hortalizas", "Otras verduras", "Mezcla de verduras", "Tomate", "Tomates y pepinos", "Maíz, guisantes y zanahoria", "Pimientos, calabacín y berenjenas", "Cebolla y ajo", "Champiñones y setas"]) {
+    assert.strictEqual(categorias.clavePasillo(nombre, FV), verduras, `"${nombre}"`);
+    assert.strictEqual(categorias.nombrePasillo(nombre, FV), "Verduras y hortalizas", `"${nombre}"`);
+  }
+
+  assert.strictEqual(categorias.nombrePasillo("Lechugas y ensaladas", FV), "Lechugas y ensaladas");
+  assert.strictEqual(categorias.nombrePasillo("Lechuga y ensalada preparada", FV), "Lechugas y ensaladas");
+  // "Fruta y verdura" habla de las dos, así que no puede caer en ninguna.
+  assert.strictEqual(categorias.nombrePasillo("Fruta y verdura", FV), "Frutas y verduras");
+  // Y "Frescos" dentro de este cajón es la frutería, no un pasillo propio.
+  assert.strictEqual(categorias.nombrePasillo("Frescos", FV), "Frutas y verduras");
+});
+
+test("la fusión por palabra clave NO se aplica sin declarar el cajón", () => {
+  // Es lo que la hace segura: fuera del pasillo fresco las mismas palabras son otra
+  // cosa. Medido, una fusión global se llevaría "Refresco de naranja y de limón"
+  // (34), "Yogures con frutas y sabores" (30) y "Estropajo, bayeta y guantes" (25,
+  // por "ajo" dentro de "estropAJO") al pasillo de las verduras.
+  assert.strictEqual(categorias.nombrePasillo("Refresco de naranja y de limón", "bebidas"), null);
+  assert.strictEqual(categorias.nombrePasillo("Yogures con frutas y sabores", "lacteos_huevos"), null);
+  assert.strictEqual(categorias.nombrePasillo("Estropajo, bayeta y guantes", "limpieza_drogueria"), null);
+  assert.strictEqual(categorias.nombrePasillo("Tomate", undefined), null);
+});
+
+test("las guardas no dejan que una conserva se llame verdura", () => {
+  // Su sitio es otro cajón (lo arregla POR_PALABRA), y mientras tanto lo que no hay
+  // que hacer es renombrarlas: taparía el error.
+  for (const nombre of ["Conservas de verdura y frutas", "Tomate frito", "Fruta deshidratada", "Cremas y purés de verdura", "Salsas para ensalada"]) {
+    assert.strictEqual(categorias.nombrePasillo(nombre, FV), null, `"${nombre}"`);
+  }
+});
+
+test("la carnicería fusiona la picada, y el pescado NO fusiona por conteo bajo", () => {
+  // mercadona dice "Hamburguesas y picadas" y bm "Carne picada y hamburguesas": son
+  // las mismas palabras menos una, no permutadas, así que la clave mecánica no basta.
+  const picada = categorias.clavePasillo("Carne picada y hamburguesas", "carne");
+  assert.strictEqual(categorias.clavePasillo("Hamburguesas y picadas", "carne"), picada);
+  assert.strictEqual(categorias.clavePasillo("Hamburguesas y carne picada", "carne"), picada);
+  assert.strictEqual(categorias.nombrePasillo("Hamburguesas y picadas", "carne"), "Carne picada y hamburguesas");
+  // "Pan de hamburguesas" es panadería, no picada.
+  assert.strictEqual(categorias.nombrePasillo("Pan de hamburguesas y otros", "carne"), null);
+
+  // El criterio es "el mismo concepto escrito distinto", nunca "tiene pocos
+  // productos": "Bacalao" (4), "Merluza" (10) y "Anchoas" (12) son pasillos
+  // legítimamente distintos y no se tocan.
+  const claves = ["Bacalao", "Merluza", "Anchoas", "Mejillones", "Sardinas"].map(
+    (n) => categorias.clavePasillo(n, "pescado_marisco")
+  );
+  assert.strictEqual(new Set(claves).size, claves.length);
 });
 
 // --- las tres salidas -----------------------------------------------------

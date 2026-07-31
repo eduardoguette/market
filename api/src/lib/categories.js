@@ -205,7 +205,11 @@ const POR_PALABRA = [
   // Etiquetas que son un atributo y no un pasillo.
   [/^(sin gluten|sin lactosa|bio|eco|ecologico|integral|light|zero|envasado|al corte|granel|seco|humedo|marcas|varios|otros|resto|surtido|novedades|destacados)$/i, NO_FIABLE],
 
-  [/panal|bebe|infantil|potito|papilla|chupete|biberon|puericultura/i, "bebe"],
+  // `tarrito` va con `potito`: las seis etiquetas del catálogo que lo usan son
+  // comida de bebé ("Tarritos de fruta y postre", "de verduras", "de carne", "de
+  // pescado", "salados"). Sin esto se repartían entre frutas, carne y pescado según
+  // el relleno, y ninguna de esas tres es lo que hay dentro del tarro.
+  [/panal|bebe|infantil|potito|tarrito|papilla|chupete|biberon|puericultura/i, "bebe"],
   [/mascota|perro|gato|pienso|felino|canino|roedor|pajaro|acuario/i, "mascotas"],
 
   [/cerveza|vino|licor|whisky|ginebra|ron|vodka|sidra|cava|champan|vermut|espumoso|alcohol|destilado|aperitivo con alcohol/i, "bebidas_alcohol"],
@@ -214,6 +218,20 @@ const POR_PALABRA = [
 
   [/helado|congelad|ultracongelad/i, "congelados"],
   [/platos? preparados?|precocinad|pizza|lasana|canelon|croqueta|empanad|rebozad|tortilla|sushi|kebab|comida preparada|listo para|quinta gama/i, "platos_preparados"],
+
+  // Lo que se hace CON un ingrediente va antes que el ingrediente, en TODOS los
+  // cajones y no sólo en el de frutas: es la misma regla de precedencia que ya
+  // aplican los frutos secos y el chocolate con leche. Sin esto, "Caldo de pescado"
+  // es pescadería, "Sopas de aves y carne" es carnicería y "Pan de hamburguesas" es
+  // carne, y además cada una añade una fila de pasillo de 3-12 productos al cajón
+  // equivocado, que es lo que el usuario ve como subdivisión absurda.
+  [palabras("pan de hamburguesa", "pan de perrito", "pan de burger"), "panaderia_bolleria"],
+  // Ojo con el plural DENTRO de una frase: `palabras()` sólo lo añade al final, así
+  // que "sopa de ave" no encuentra "Sopas de aves y carne" y hay que escribir las dos
+  // formas. Es el precio de que el compilador sea una línea.
+  [palabras("caldo de pescado", "caldos de pescado", "crema de marisco", "cremas de marisco", "sopa de ave", "sopas de ave", "sopa de carne", "para carne", "salsa barbacoa", "salsas barbacoa"), "despensa"],
+  // "repollo" lleva "pollo" dentro: eran 7 productos de verdura en la carnicería.
+  [palabras("brocoli", "coliflor", "repollo", "lombarda"), "frutas_verduras"],
 
   [/pescad|marisco|merluza|atun|salmon|bacalao|gamba|langostino|calamar|mejillon|pulpo|sardina|anchoa|boqueron|almeja|sepia|rodaball|lubina|dorada|trucha|pescaderia/i, "pescado_marisco"],
   [/carne|ternera|cerdo|pollo|pavo|cordero|conejo|anojo|buey|vacuno|hamburguesa|salchich|chuleta|solomillo|filete|carniceria|casqueria|embutido fresco|picada/i, "carne"],
@@ -232,6 +250,36 @@ const POR_PALABRA = [
   // aperitivos escondidos en frutas y verduras, y además le daban al cajón una
   // tercera fila con "fruta" en el nombre que no se podía distinguir de las otras dos.
   [/frutos? secos?/i, "snacks"],
+
+  // Y por el mismo motivo, todo lo que se hace CON fruta o verdura va antes que la
+  // fruta y la verdura. Es la clase de error que más pesa en el cajón: "Conservas
+  // de verdura y frutas" (mercadona, 52), "Tarritos de fruta y postre" (bm, 39),
+  // "Patatas fritas y snacks" (mercadona, 42), "Tomate frito" (bm 15 + ahorramás
+  // 9), "Fruta deshidratada" (bm, 22), "Cremas y purés de verdura" (10), "Sopa de
+  // verdura" (3), "Caldo de verdura" (2), "Fruta en almíbar" (11). Eran ~230
+  // productos de despensa, snacks y potitos dentro de la frutería, y además ~15
+  // filas de pasillo de 1 sola cadena que el usuario ve como subdivisión absurda.
+  //
+  // Las reglas genéricas de despensa y snacks de más abajo ya dicen "conserva",
+  // "caldo", "sopa" y "patatas fritas": el problema nunca fue que faltaran, es que
+  // el `fruta|verdura|tomate|patata` de la regla siguiente se ejecutaba primero.
+  // Van con `\b` porque sin anclar "frito" encuentra "friTOs" pero también
+  // "reFRITO", y "col" encontraría "chocolate".
+  // Los tarritos y las bolsitas de fruta son potitos, no fruta: mismo caso.
+  [palabras("tarrito", "potito", "bolsita de fruta", "bolsitas de fruta"), "bebe"],
+  [palabras("patatas frita", "patata frita", "patatas de bolsa", "fruta deshidratada", "fruta desecada", "verdura deshidratada"), "snacks"],
+  [palabras("sal de fruta"), "parafarmacia"],
+  // Acotadas al contexto de fruta y verdura, no genéricas: la regla de despensa de
+  // más abajo ya dice "sopa", "caldo", "salsa" y "vinagre", y sólo hace falta
+  // adelantarse en los casos donde la palabra de verdura se los llevaría antes. Con
+  // "sopa" a secas acá arriba, "Fideos y pasta para sopas" (ahorramás) se iba de
+  // pasta a despensa: medido, era la única regresión de este cambio.
+  [palabras(
+    "conserva", "almibar", "tomate frito", "tomate natural", "tomate triturado",
+    "tomate entero", "sopa de verdura", "caldo de verdura", "crema de verdura",
+    "cremas y pure", "pure de patata", "pure de verdura", "salsa para ensalada",
+    "salsas para ensalada", "vinagre de manzana", "gazpacho", "salmorejo"
+  ), "despensa"],
 
   // Sin `^frescos$`: "Frescos" es un departamento, no un pasillo, y lo resuelve
   // DEPARTAMENTOS por el nombre del producto. Si una cadena nueva trae "Frescos",
@@ -347,43 +395,193 @@ function claveMorfologica(palabra) {
 // entrada "fruta y verdura" ya cubre "Fruta y verdura", "Frutas y verduras" y
 // "frutas y verdura".
 //
-// Sólo los pasillos GENÉRICOS de fruta y verdura, que es el caso reportado y el
-// que más pesa (unas 550 filas repartidas en 12 nombres). Los específicos
-// ("Tomate", "Naranja", "Lechuga y ensalada preparada") se quedan como están.
+// Sólo los pasillos MIXTOS, los que hablan de fruta y de verdura a la vez y por
+// tanto no pueden caer en ninguno de los dos. Lo demás lo resuelve la pasada por
+// palabra clave de más abajo, que no necesita una entrada por cadena.
+// Las claves se escriben en el formato de `claveMecanica`: palabras sueltas,
+// singularizadas, sin partículas y ORDENADAS alfabéticamente. Por eso una sola
+// entrada cubre "Fruta y verdura", "Frutas y verduras" y "Verduras y frutas".
 const PASILLOS_SINONIMOS = {
-  "fruta": "Frutas y verduras",
-  "verdura": "Frutas y verduras",
-  "fruta y verdura": "Frutas y verduras",
-  "verdura y hortaliza": "Frutas y verduras",
-  "fruta y hortaliza": "Frutas y verduras",
-  "fruta variada": "Frutas y verduras",
-  "fruta de temporada": "Frutas y verduras",
-  "otra verdura": "Frutas y verduras",
-  "otra verdura y hortaliza": "Frutas y verduras",
-  "mezcla de verdura": "Frutas y verduras",
-  "verdura preparada": "Frutas y verduras",
-  "fruteria": "Frutas y verduras",
+  "fruta verdura": "Frutas y verduras",
+  "fruta hortaliza": "Frutas y verduras",
 };
+
+// Fusión de pasillos por palabra clave, DENTRO de un cajón. Es el tercer nivel, y
+// hace falta porque el segundo no escala: la cola del catálogo son etiquetas
+// hiperespecíficas de una sola cadena ("Maíz, guisantes y zanahoria" 13 productos,
+// "Plátanos y uvas" 4, "Pimientos, calabacín y berenjenas" 3). Medido dentro de
+// frutas y verduras: 46 de las 58 filas son de UNA cadena y 42 tienen 15 productos
+// o menos. Escribirlas a mano en PASILLOS_SINONIMOS sería una lista infinita, una
+// entrada por ocurrencia y por cadena nueva.
+//
+// ESTÁ ACOTADA POR CAJÓN A PROPÓSITO, y no es un detalle: la misma palabra
+// significa otra cosa fuera del pasillo fresco. Medido sobre las etiquetas reales,
+// una fusión global se llevaría "Refresco de naranja y de limón" (mercadona, 34),
+// "Yogures con frutas y sabores" (ahorramás, 30), "Ajo, perejil y orégano" (10) y
+// hasta "Estropajo, bayeta y guantes" (25, por "ajo" dentro de "estropAJO") al
+// pasillo de las verduras. Por eso los patrones van con `\b` y la fusión sólo se
+// aplica cuando quien pregunta declara el cajón.
+//
+// La tabla está indexada por cajón, así que ampliarla a otro (bebidas, limpieza)
+// es añadir una clave, no rediseñar nada. Empieza donde está la evidencia.
+const PASILLOS_POR_PALABRA = {
+  frutas_verduras: [
+    // GUARDAS, primero y sin fusionar: etiquetas que llevan una palabra de fruta o
+    // verdura pero no son el pasillo fresco ("Conservas de fruta", "Tomate frito",
+    // "Sopa de verdura", "Tarritos de verduras"). Su sitio es otro cajón -- lo
+    // arregla POR_PALABRA más abajo -- y mientras tanto lo que NO hay que hacer es
+    // renombrarlas "Verduras y hortalizas", que taparía el error.
+    // Van con `palabras()` por lo mismo que POR_NOMBRE: `\bverdura\b` no encuentra
+    // "Verduras", que es como lo escriben cuatro de las nueve cadenas.
+    [palabras(
+      "conserva", "almibar", "deshidratada", "deshidratado", "desecada", "desecado",
+      "frito", "frita", "triturado", "triturada", "troceado", "troceada", "pure", "crema",
+      "sopa", "caldo", "salsa", "vinagre", "tarrito", "potito", "bolsita", "snack",
+      "congelado", "congelada", "zumo", "yogur"
+    ), null],
+
+    [palabras("ensalada", "ensaladilla", "lechuga", "hoja", "brote", "canonigo", "rucula", "escarola", "berro", "germinado"), "Lechugas y ensaladas"],
+
+    // "Frescos" dentro de este cajón son 469 productos de frutería de alcampo: el
+    // nombre del departamento no dice nada como pasillo, así que se pliega al
+    // pasillo genérico del cajón en vez de quedarse como fila propia.
+    [/^frescos$|\bfruteria\b|\bverduleria\b/, "Frutas y verduras"],
+
+    [palabras(
+      "fruta", "manzana", "pera", "uva", "platano", "banana", "naranja", "limon", "lima",
+      "pomelo", "mandarina", "citrico", "melon", "sandia", "kiwi", "pina", "mango", "papaya",
+      "aguacate", "fresa", "freson", "frambuesa", "arandano", "mora", "grosella", "cereza",
+      "ciruela", "melocoton", "nectarina", "paraguaya", "albaricoque", "higo", "breva",
+      "granada", "caqui", "chirimoya", "maracuya", "datil", "hueso", "tropical", "bosque",
+      "rojo", "roja"
+    ), "Frutas"],
+
+    // "ajo" y "col" NO entran: sin plural son inofensivos, con plural se llevan
+    // "estropAJOs" y "chocoLATE"... y aun con `\b`, "Ajo, perejil y orégano" es el
+    // pasillo de las especias, no el de la verdura. Las cebollas y los ajos entran
+    // por "cebolla", que sí es inequívoca.
+    [palabras(
+      "verdura", "hortaliza", "vegetal", "tomate", "pepino", "pimiento", "calabacin",
+      "berenjena", "cebolla", "puerro", "patata", "boniato", "calabaza", "zanahoria",
+      "remolacha", "nabo", "rabanito", "apio", "acelga", "espinaca", "esparrago",
+      "alcachofa", "brocoli", "coliflor", "repollo", "lombarda", "judia", "guisante",
+      "haba", "maiz", "raiz", "raices", "seta", "champinon", "boletus", "shiitake"
+    ), "Verduras y hortalizas"],
+  ],
+
+  // La carnicería sólo necesita una entrada, y por un motivo concreto: la clave
+  // mecánica ya es insensible al orden, así que "Hamburguesas y carne picada" (aldi)
+  // y "Carne picada y hamburguesas" (bm + ahorramás) caen juntas sin escribir nada.
+  // Lo que no puede resolver sola es que mercadona diga "Hamburguesas y picadas",
+  // sin la palabra "carne": son las mismas palabras MENOS una, no permutadas, y
+  // fusionar por subconjunto es la regla que se descartó arriba (metería "Ojos"
+  // dentro de "Contorno de ojos"). Una línea escrita a mano y auditable lo arregla.
+  //
+  // Y NO hay entrada para el pescado a propósito, aunque la cola de pasillos de 3-12
+  // productos ahí sea igual de larga: "Bacalao" (4), "Merluza" (10) y "Anchoas" (12)
+  // son pasillos legítimamente distintos, no tres formas de escribir lo mismo. El
+  // criterio de fusión es "el mismo concepto escrito distinto", nunca "tiene pocos
+  // productos". Su permutación real -- "Sepia, pulpo y calamar" contra "Pulpo,
+  // calamar y sepia" -- ya la resuelve la clave mecánica.
+  carne: [
+    // "Pan de hamburguesas y otros" es panadería y ya sale de este cajón por la
+    // regla de arriba; la guarda queda por si otra cadena trae algo parecido.
+    [palabras("pan"), null],
+    [palabras("picada", "hamburguesa", "burger"), "Carne picada y hamburguesas"],
+  ],
+};
+
+// El nombre canónico por palabra clave, dentro de un cajón. `null` significa
+// "reconocida como guarda: no fusionar", distinto de "ninguna regla la vio".
+function pasilloPorPalabra(nombre, canonical) {
+  const reglas = PASILLOS_POR_PALABRA[canonical];
+  if (!reglas) return undefined;
+  const texto = normaliza(nombre);
+  for (const [re, destino] of reglas) {
+    if (re.test(texto)) return destino;
+  }
+  return undefined;
+}
+
+// Partículas que no distinguen un pasillo de otro. "otras" entra porque es un
+// prefijo de relleno que usan bm y ahorramás para el cajón de sobras de un pasillo
+// ("Especias" / "Otras especias", "Ambientadores" / "Otros ambientadores",
+// "Insecticidas" / "Otros insecticidas": seis familias del catálogo).
+//
+// "con", "sin" y "para" NO están, y es la parte importante de esta lista: sí
+// distinguen. Sin ellas, "Agua con gas" (17) y "Agua sin gas" (35) tendrían la misma
+// clave y se fusionarían en una fila, que es exactamente lo contrario de lo que
+// quiere quien busca agua con gas. Igual con "Para carne" (6, adobos y especias) y
+// "Carnes" (176).
+const PARTICULAS = new Set([
+  "y", "e", "o", "u", "de", "del", "la", "el", "los", "las", "un", "una", "al", "a", "en",
+  "otro", "otra", "otros", "otras",
+]);
+
+// La clave mecánica: la que no puede equivocarse porque no decide nada, sólo
+// normaliza la ESCRITURA. Tres cosas, en este orden:
+//
+//   1. acentos y mayúsculas    "Bollería envasada" = "Bolleria Envasada"
+//   2. singular/plural         "Yogur líquido" = "Yogures líquidos"
+//   3. ORDEN de las palabras   "Ahumados y salazones" = "Salazones y ahumados"
+//
+// (3) es una bolsa de palabras: se ordenan alfabéticamente y se quitan las
+// partículas. Hace falta porque cada cadena elige un orden distinto para el mismo
+// pasillo, y es una diferencia puramente de redacción -- no hay ninguna cadena para
+// la que "Ahumados y salazones" signifique algo distinto de "Salazones y ahumados".
+// Medido sobre el catálogo entero: 20 familias de pasillos, 1.186 productos, en 13
+// cajones distintos. Entre ellas "Champiñones y setas"/"Setas y champiñones",
+// "Barritas cereales"/"Barritas de cereales"/"Cereales y barritas",
+// "Caldos y sopas"/"Sopa y caldo" y "Embutido curado"/"Curados y embutidos".
+//
+// Lo que NO hace, y se probó y se descartó con datos: fusionar cuando las palabras
+// de una etiqueta son un SUBCONJUNTO de las de otra. Suena parecido y es otra cosa:
+// sobre el catálogo real da 392 pares, y entre ellos "Alimentación" (3.546 productos)
+// dentro de "Alimentación saludable" (5), "Ojos" (74) dentro de "Contorno de ojos"
+// (4), "Aceite" dentro de "Crema y aceite corporal" y "Desayuno" (100) dentro de
+// "Desayuno y Merienda" (2.682). Es la clase de regla que no se puede auditar: cada
+// pasillo genérico se traga al específico que lo menciona.
+function claveMecanica(nombre) {
+  const palabrasDelNombre = normaliza(nombre)
+    .replace(/[,;]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(claveMorfologica)
+    .filter((p) => !PARTICULAS.has(p));
+  // Si el nombre era todo partículas no queda nada útil: se cae al texto normalizado
+  // entero, que al menos sigue identificando la fila.
+  if (!palabrasDelNombre.length) return normaliza(nombre) || null;
+  return [...new Set(palabrasDelNombre)].sort().join(" ");
+}
+
+// El nombre canónico de un pasillo, o null si no hay ninguno escrito y el que
+// llama tiene que elegir la ortografía (la del pasillo con más productos detrás),
+// que es lo único honesto: entre "Frutas" y "Fruta" no hay una correcta, hay una
+// mayoritaria.
+//
+// `canonical` es el cajón, y es opcional: sin él sólo se aplican los sinónimos
+// exactos, que son seguros en todo el catálogo. La fusión por palabra clave
+// necesita el cajón para no confundir un refresco de naranja con la frutería, así
+// que sin cajón no se aplica. Es el caso real: la app abre un cajón a la vez y pide
+// `/pasillos?categoria_canonica=<cajón>`.
+function nombrePasillo(nombre, canonical) {
+  const base = claveMecanica(nombre);
+  if (!base) return null;
+  if (PASILLOS_SINONIMOS[base]) return PASILLOS_SINONIMOS[base];
+  const porPalabra = pasilloPorPalabra(nombre, canonical);
+  return porPalabra || null;
+}
 
 // La clave de agrupación de un nombre de pasillo. Dos pasillos con la misma clave
 // son el mismo pasillo.
-function clavePasillo(nombre) {
-  const base = normaliza(nombre).split(/\s+/).filter(Boolean).map(claveMorfologica).join(" ");
+function clavePasillo(nombre, canonical) {
+  const base = claveMecanica(nombre);
   if (!base) return null;
-  const sinonimo = PASILLOS_SINONIMOS[base];
-  // El sinónimo se resuelve a la clave de SU nombre canónico, para que las doce
+  const canonico = nombrePasillo(nombre, canonical);
+  // El nombre canónico se resuelve a la clave de SÍ MISMO, para que las doce
   // variantes de fruta y verdura acaben en una única clave y no en doce que
   // comparten etiqueta.
-  return sinonimo ? normaliza(sinonimo).split(/\s+/).map(claveMorfologica).join(" ") : base;
-}
-
-// El nombre canónico de un pasillo, si está escrito a mano. Cuando no lo está
-// devuelve null y el que llama elige la ortografía (la del pasillo con más
-// productos detrás), que es lo único honesto: entre "Frutas" y "Fruta" no hay una
-// correcta, hay una mayoritaria.
-function nombrePasillo(nombre) {
-  const base = normaliza(nombre).split(/\s+/).filter(Boolean).map(claveMorfologica).join(" ");
-  return PASILLOS_SINONIMOS[base] || null;
+  return canonico ? claveMecanica(canonico) : base;
 }
 
 // Prefijos de ruta, con la regla del prefijo más largo. Una raíz limpia es una
@@ -702,6 +900,7 @@ module.exports = {
   DEPARTAMENTOS,
   POR_NOMBRE,
   PASILLOS_SINONIMOS,
+  PASILLOS_POR_PALABRA,
   clavePasillo,
   nombrePasillo,
   FUERA_DE_ALCANCE,

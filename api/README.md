@@ -56,6 +56,17 @@ carne               552   panaderia_bolleria 136   lacteos_huevos     5
 frutas_verduras     469   platos_preparados   12   despensa           3
 ```
 
+#### Lo que se hace CON un ingrediente va antes que el ingrediente
+
+Misma regla de precedencia que los frutos secos y el chocolate con leche, y la causa de
+que el cajón de frutas y verduras acumulara filas absurdas: `fruta|verdura|tomate|patata`
+se ejecutaba antes que `conserva|sopa|caldo|tarrito`. Eran ~260 productos de despensa,
+snacks y potitos dentro de la frutería —`Conservas de verdura y frutas` (52), `Tarritos
+de fruta y postre` (39), `Patatas fritas y snacks` (42), `Tomate frito` (24), `Fruta
+deshidratada` (22)— y ~20 filas de pasillo de una sola cadena. Vale para todos los
+cajones, no sólo el de frutas: `Caldo de pescado` era pescadería, `Sopas de aves y
+carne` carnicería y `Pan de hamburguesas` carne.
+
 `POR_NOMBRE` **no** es `POR_PALABRA` y no se puede reutilizar: aplicada a nombres de
 producto, la tabla de etiquetas manda "Chipirones" a bebidas alcohólicas (por "ron"),
 "Sandía de carne naranja" a carne y "Aguacate" a bebidas — 1.654 de 2.810 mal. Las
@@ -111,15 +122,43 @@ Para poder navegar una cadena sin escribir nada en el buscador.
                   "aisle_key": "fruta y verdura", "aisle_canonical": "Frutas y verduras" } ] }
 ```
 
-**`aisle_key` y `aisle_canonical`: el mismo pasillo escrito distinto.** Las nueve
-cadenas nombran igual pasillo de nueve formas: `Fruta` (mercadona, 54), `Frutas` (dia
-86 + aldi 3) y `Fruta y verdura` (mercadona, 59) eran cuatro filas para el mismo
-pasillo. Dos filas con el mismo `aisle_key` **son el mismo pasillo** y se pintan con
-`aisle_canonical`. Se resuelve en dos niveles: una clave mecánica (sin acentos,
-minúsculas, singular/plural palabra por palabra, que no puede equivocarse) y una tabla
-de sinónimos escrita a mano (`PASILLOS_SINONIMOS`) para los nombres que significan lo
-mismo sin parecerse. No hay jerarquía: `Tomate` y `Naranja` siguen siendo pasillos
-propios, porque esa granularidad es lo que aporta el nivel de pasillo sobre el de cajón.
+**`aisle_key` y `aisle_canonical`: el mismo pasillo escrito distinto.** Dentro de un
+cajón, los pasillos seguían siendo el nombre crudo de cada cadena, y eso daba **86
+filas dentro de "Frutas y verduras"**: 46 de una sola cadena y 42 con 15 productos o
+menos (`Fruta` 54 / `Frutas` 89 / `Fruta y verdura` 59 para el mismo pasillo, más
+`Maíz, guisantes y zanahoria` 13, `Plátanos y uvas` 4, `Manzana` 3...). Dos filas con
+el mismo `aisle_key` **son el mismo pasillo** y se pintan con `aisle_canonical`.
+Quedan **4 filas**: Verduras y hortalizas, Frutas, Lechugas y ensaladas, y las
+etiquetas que hablan de las dos cosas.
+
+Tres niveles, de más seguro a menos:
+
+1. **clave mecánica**, sin listas y sin decidir nada: acentos y mayúsculas,
+   singular/plural, y el **orden de las palabras** (bolsa de palabras ordenada, sin
+   partículas). El orden vale para todo el catálogo: 20 familias en 13 cajones, entre
+   ellas `Ahumados y salazones` = `Salazones y ahumados`, `Sepia, pulpo y calamar` =
+   `Pulpo, calamar y sepia` y `Barritas de cereales` = `Cereales y barritas`.
+2. **sinónimos exactos** (`PASILLOS_SINONIMOS`), para lo que significa lo mismo sin
+   parecerse.
+3. **palabra clave dentro de un cajón** (`PASILLOS_POR_PALABRA`), para la cola de
+   etiquetas hiperespecíficas de una sola cadena.
+
+**`con`, `sin` y `para` no son partículas**, y es lo que acota el nivel 1: sin ellas,
+`Agua con gas` (17) y `Agua sin gas` (35) serían una sola fila.
+
+**El nivel 3 va acotado por cajón a propósito.** Fuera del pasillo fresco las mismas
+palabras son otra cosa: una fusión global se llevaría `Refresco de naranja y de limón`
+(34), `Yogures con frutas y sabores` (30) y hasta `Estropajo, bayeta y guantes` (25,
+por "ajo" dentro de "estrop**ajo**") al pasillo de las verduras. Sin
+`categoria_canonica` sólo actúan los niveles 1 y 2.
+
+**El criterio de fusión es "el mismo concepto escrito distinto", nunca "tiene pocos
+productos".** `Bacalao` (4), `Merluza` (10) y `Anchoas` (12) son pasillos legítimamente
+distintos y no se tocan. Por eso también **se descartó fusionar por subconjunto de
+palabras**, que suena parecido: sobre el catálogo real da 392 pares, entre ellos
+`Alimentación` (3.546 productos) dentro de `Alimentación saludable` (5), `Ojos` (74)
+dentro de `Contorno de ojos` (4) y `Desayuno` (100) dentro de `Desayuno y Merienda`
+(2.682). Cada pasillo genérico se tragaría al específico que lo menciona.
 
 Los dos campos son **aditivos**: `aisle` sigue siendo el nombre crudo de la cadena y es
 el que hay que mandar a `/products?category=`.

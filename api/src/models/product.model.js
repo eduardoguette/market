@@ -247,7 +247,10 @@ function countByAisle(filters = {}, { minTotal = 0, limit } = {}) {
   const sql = `${agrupado} ORDER BY total DESC, aisle ${limit ? "LIMIT ?" : ""}`;
   if (limit) params.push(limit);
 
-  return { total, pasillos: conPasilloCanonico(db.prepare(sql).all(...params)) };
+  return {
+    total,
+    pasillos: conPasilloCanonico(db.prepare(sql).all(...params), filters.categoria_canonica),
+  };
 }
 
 // Añade a cada fila la identidad canónica del pasillo: `aisle_key` (dos filas con
@@ -270,10 +273,16 @@ function countByAisle(filters = {}, { minTotal = 0, limit } = {}) {
 // Con `limit`, la mayoría se calcula sobre las filas devueltas y no sobre todas.
 // Asumido: `limit` recorta la cola de pasillos de 1-2 productos, que por definición
 // no gana ninguna mayoría.
-function conPasilloCanonico(filas) {
+//
+// `canonical` es el cajón por el que se filtró, y se pasa entero a la taxonomía: la
+// fusión por palabra clave la necesita para no confundir un refresco de naranja con
+// la frutería. Sin filtro de cajón sólo actúan la clave mecánica y los sinónimos
+// exactos, que son seguros en todo el catálogo. Es el caso real: la app abre un
+// cajón a la vez y pide `/pasillos?categoria_canonica=<cajón>`.
+function conPasilloCanonico(filas, canonical) {
   const porClave = new Map();
   for (const fila of filas) {
-    const key = clavePasillo(fila.aisle);
+    const key = clavePasillo(fila.aisle, canonical);
     if (!key) continue;
     const acumulado = porClave.get(key) || new Map();
     acumulado.set(fila.aisle, (acumulado.get(fila.aisle) || 0) + fila.total);
@@ -282,19 +291,18 @@ function conPasilloCanonico(filas) {
 
   const nombrePorClave = new Map();
   for (const [key, totales] of porClave) {
-    const escrito = nombrePasillo([...totales.keys()][0]);
-    if (escrito) {
-      nombrePorClave.set(key, escrito);
-      continue;
-    }
-    nombrePorClave.set(
-      key,
-      [...totales.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es"))[0][0]
+    // El nombre escrito a mano se busca contra el pasillo MÁS pesado de la clave, no
+    // contra el primero que llegó: dentro de una clave puede haber una etiqueta con
+    // nombre canónico y otra sin él, y el resultado no debe depender del orden.
+    const porPeso = [...totales.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "es")
     );
+    const escrito = porPeso.map(([nombre]) => nombrePasillo(nombre, canonical)).find(Boolean);
+    nombrePorClave.set(key, escrito || porPeso[0][0]);
   }
 
   return filas.map((fila) => {
-    const key = clavePasillo(fila.aisle);
+    const key = clavePasillo(fila.aisle, canonical);
     return { ...fila, aisle_key: key, aisle_canonical: key ? nombrePorClave.get(key) : null };
   });
 }
