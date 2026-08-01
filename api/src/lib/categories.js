@@ -74,7 +74,6 @@ const POR_ETIQUETA = {
     // aperitivos, las conservas y el pan de molde; "Bebidas" (2.333) mete 1.100
     // botellas de vino, cerveza y whisky en el mismo cajón que el agua mineral.
     // Están en DEPARTAMENTOS, que las resuelve por el nombre del producto.
-    "Leche, Huevos, Lácteos, Yogures y Bebidas vegetales": "lacteos_huevos",
     "Congelados": "congelados",
     "Bebé": "bebe",
     "Parafarmacia": "parafarmacia",
@@ -99,8 +98,6 @@ const POR_ETIQUETA = {
   dia: {
     "Cervezas, vinos y licores": "bebidas_alcohol",
     "Chocolates y golosinas": "dulces_chocolate",
-    "Conservas, caldos y cremas": "despensa",
-    "Aceites, salsas y especias": "despensa",
     "Aperitivos y frutos secos": "snacks",
     "Agua y refrescos": "bebidas",
     "Congelados y helados": "congelados",
@@ -282,7 +279,16 @@ const POR_PALABRA = [
   [/snack|aperitivo|patatas fritas|fruto seco|frutos secos|cortez|nachos|palomitas|encurtido|aceituna|tortita|picoteo|picar/i, "snacks"],
 
   [/pasta|fideo|arroz|legumbre|lenteja|garbanzo|alubia|judia seca|cuscus|quinoa|noodle|espagueti|macarron/i, "pasta_arroz_legumbres"],
-  [/aceite|vinagre|sal\b|especia|sazonador|salsa|conserva|caldo|sopa|crema de verdura|harina|levadura|tomate frito|mayonesa|ketchup|mostaza|condimento|despensa|alimentacion|cocina mejicana|cocina oriental|cocina italiana|sabores de|nutricion deportiva|proteina|dietetic|esparrago|palmito|alcachofa|pimiento|maiz dulce|guarnicion/i, "despensa"],
+  // La conservación de alimentos es papel y desechables, no despensa: film, papel de
+  // aluminio, bolsas de congelación y recipientes. Va antes de la regla de despensa
+  // porque "conservación" ya no la coge, pero estas etiquetas necesitan una casa.
+  [/conservacion (de )?alimento|bolsas? conservacion|\bmenaje\b/i, "papel_desechables"],
+  // El aceite y la crema CORPORALES son cosmética, y el aceite de la despensa los
+  // reclamaba: "Crema y aceite corporal" son 25 productos.
+  [/(aceite|crema|locion) corporal|aceite capilar|aceite de almendras|crema de manos|crema facial/i, "cosmetica_perfumeria"],
+  // La sal y el abrillantador del LAVAVAJILLAS son droguería, no la sal de cocina.
+  [/limpiamaquina|sal lavavajillas|sal para lavavajillas|abrillantador|\bantical\b/i, "limpieza_drogueria"],
+  [/aceite|vinagre|sal\b|\bespecias?\b|sazonador|salsa|\bconservas?\b|caldo|sopa|crema de verdura|harina|levadura|tomate frito|mayonesa|ketchup|mostaza|condimento|despensa|alimentacion|cocina mejicana|cocina oriental|cocina italiana|sabores de|nutricion deportiva|proteina|dietetic|esparrago|palmito|alcachofa|pimiento|maiz dulce|guarnicion/i, "despensa"],
 
   [/papel higienic|papel de cocina|servilleta|panuelo|celulosa|film|aluminio|bolsa de basura|desechable|vajilla desechable/i, "papel_desechables"],
   // Los químicos de lavandería van ANTES que el textil: "Detergente ropa",
@@ -528,6 +534,91 @@ const PASILLOS_POR_PALABRA = {
     // ahorramás 1). Fusionarlo esconderría seis productos de cordero en el pasillo del
     // conejo. Se quedan como dos filas porque son dos pasillos.
     [palabras("ave", "pollo", "pavo"), "Aves y pollo"],
+  ],
+
+  // Lácteos: el yogur se escribe de once formas. Lo que se fusiona es la redacción
+  // ("Yogur líquido" / "Yogures líquidos", "Yogur sabores" / "Yogures con frutas y
+  // sabores"); lo que NO, el tipo de yogur, porque el usuario lo elige: el griego, el
+  // bífidus, el kéfir y el desnatado se quedan como filas propias. Mismo criterio que
+  // separa el bacalao de la merluza.
+  //
+  // Cada patrón de yogur va acotado a la palabra "yogur" a propósito, y no suelto.
+  // Medido: con un `vegetal` suelto, la regla del yogur vegetal se tragaba "Leche,
+  // Huevos, Lácteos, Yogures y Bebidas vegetales" -- 1.205 productos, el cajón casi
+  // entero -- porque las bebidas vegetales también son "vegetal". Igual con `liquido`,
+  // que se llevaba "Nata y otros líquidos para cocinar".
+  lacteos_huevos: [
+    // GUARDAS: su sitio es otro cajón, así que no se les pone nombre de pasillo lácteo.
+    [palabras("queso", "pasta", "pan"), null],
+    // Lo genérico primero: son las etiquetas que nombran el cajón entero, y si van
+    // detrás las reglas de huevo y de mantequilla se las reparten.
+    [/^(lacteos|lacteos y huevos|productos lacteos|huevos, leche y mantequilla)$/i, "Lácteos y huevos"],
+    [palabras("kefir"), "Kéfir"],
+    [palabras("bifidus"), "Bífidus"],
+    [/yogur\w*[^]*griego|griego\w*[^]*yogur|^yogures griegos$/i, "Yogures griegos"],
+    [/yogur\w*[^]*desnatad/i, "Yogur desnatado"],
+    [/yogur\w*[^]*(liquido|liquidos|bebible)/i, "Yogures líquidos"],
+    [/yogur\w*[^]*vegetal/i, "Yogur vegetal"],
+    [/yogur\w*[^]*(fruta|sabor)|(fruta|sabor)\w*[^]*yogur/i, "Yogures con frutas y sabores"],
+    [/yogur\w*[^]*natural|natural\w*[^]*yogur/i, "Yogures naturales"],
+    [palabras("flan", "natilla", "gelatina", "postre", "cuajada", "arroz con leche", "mousse", "copa"), "Postres lácteos"],
+    // La nata antes que la mantequilla y que la leche: "Nata para cocinar" y "Nata
+    // montada" son su propio pasillo.
+    [palabras("nata", "montar", "cocinar"), "Nata"],
+    [palabras("mantequilla", "margarina"), "Mantequilla y margarina"],
+    [palabras("huevo"), "Huevos"],
+    [palabras("yogur"), "Yogures"],
+    // Y la leche al final, con las hojas sueltas de bm ("Entera", "Semidesnatada"),
+    // que dentro de este cajón sólo pueden ser leche.
+    [/leche|bebidas? vegetal|batido|^entera$|^semidesnatada$|^desnatada$|evaporada|condensada|en polvo|sin lactosa/i, "Leche y bebidas vegetales"],
+  ],
+
+  // Higiene: la forma del envase no es un pasillo. "Desodorante", "Desodorante
+  // spray", "Desodorante roll-on", "Roll on" y "Spray" son cinco filas para el mismo
+  // producto, y quien busca desodorante no busca "roll on". Se fusionan por producto.
+  //
+  // Se respeta lo que sí es otra compra: la higiene bucal, la íntima y la capilar no
+  // se mezclan entre sí.
+  higiene_personal: [
+    // GUARDA: "Membrillo, cabello de ángel y polen" es un dulce de obrador, no el
+    // pasillo del champú.
+    [/cabello de angel/i, null],
+    // La boca va antes que el desodorante: "Limpieza dentaduras postizas, spray bucal
+    // e hilo dental" se iba a "Desodorante" por la palabra "spray".
+    [/bucal|dentifric|dentadura|pasta de dientes|cepillos? de dientes|colutorio|enjuague|antisceptico|antiseptico|hilo dental|seda dental|\bcolgate\b/i, "Higiene bucal"],
+    [palabras("desodorante", "antitranspirante", "roll on", "roll-on", "spray"), "Desodorante"],
+    [/compresa|tampon|salvaslip|protegeslip|intima|perdidas de orina|menstrual/i, "Higiene íntima y compresas"],
+    [palabras("champu", "acondicionador", "mascarilla capilar", "fijacion", "cabello", "capilar", "anticaspa", "seco y danado"), "Champú y cabello"],
+    [/gel de (bano|ducha)|gel y jabon|jabon de manos|jabon liquido|pastilla de jabon/i, "Gel de baño y jabones"],
+    [/facial/i, "Cuidado e higiene facial"],
+    [palabras("corporal", "cuidado corporal", "crema corporal"), "Cuidado corporal"],
+    [/^(higiene|higiene personal|cuidado personal|higiene y cuidado|accesorios e higiene)$/i, "Higiene personal"],
+  ],
+
+  // Despensa es el cajón más ancho del mapa y el que más filas tenía (118). Sus
+  // familias son claras y el usuario las distingue: aceites, especias, salsas,
+  // conservas, caldos. Lo que sobra es la redacción -- "Especias" y "Otras especias"
+  // son la misma fila, y "Mayonesa", "Ketchup", "Mostaza" y "Mayonesa, ketchup y
+  // mostaza" son cuatro nombres del pasillo de las salsas.
+  //
+  // Lo que NO se fusiona: "Tomate frito" (24) y "Cocina mejicana" (37) se quedan
+  // solos. El tomate frito es una compra propia -- lo dice que cuatro cadenas le den
+  // pasillo -- y la cocina mejicana no es la oriental.
+  despensa: [
+    // El aceite primero: "Aceite, vinagre y sal" es el pasillo de los aceites, y las
+    // reglas de sal y vinagre de abajo se lo llevarían.
+    [palabras("aceite", "vinagre", "balsamico"), "Aceites y vinagres"],
+    [palabras("tomate frito", "tomate natural", "tomate triturado"), "Tomate frito"],
+    [palabras("especia", "sazonador", "condimento", "aderezo", "pimienta", "pimenton", "azafran", "canela", "oregano"), "Especias y sazonadores"],
+    [palabras("mayonesa", "ketchup", "mostaza", "salsa", "alino", "picante", "brava", "barbacoa", "para carne"), "Salsas y aliños"],
+    [palabras("caldo", "sopa", "consome", "crema", "pure", "gazpacho", "salmorejo", "concentrado y pastilla"), "Caldos, sopas y cremas"],
+    [palabras("conserva", "almibar", "esparrago", "alcachofa", "palmito", "maiz", "cocida", "cocido", "brik", "doypack", "vegetal y condimento", "coles y otros vegetales"), "Conservas"],
+    [palabras("harina", "levadura"), "Harinas"],
+    [palabras("sal", "bicarbonato"), "Sal y bicarbonato"],
+    [/cocina oriental|cocina asiatica|sabores de asia|comida asiatica/i, "Cocina oriental"],
+    [palabras("nutricion deportiva", "proteina", "dietetic", "nutricion y dietetica"), "Nutrición deportiva"],
+    // Y las etiquetas que sólo dicen "esto es comida" son el cajón entero.
+    [/^(despensa|alimentacion|alimentacion saludable|especialidades|otros|varios)$/i, "Despensa"],
   ],
 
   // Droguería es el cajón con más filas del catálogo (97) y el reparto es el de
@@ -899,6 +990,10 @@ const DEPARTAMENTOS = {
   alcampo: {
     "Frescos": "frutas_verduras",
     "Alimentación": "despensa",
+    // Nombra cinco familias a la vez. Además resuelve el último choque de la tabla de
+    // pasillos lácteos: la etiqueta lleva "Yogures" Y "vegetales", así que la regla del
+    // yogur vegetal se llevaba sus 1.037 productos.
+    "Leche, Huevos, Lácteos, Yogures y Bebidas vegetales": "lacteos_huevos",
     "Bebidas": "bebidas",
     "Desayuno y Merienda": "cereales_galletas",
     "Perfumeria": "cosmetica_perfumeria",
@@ -916,6 +1011,8 @@ const DEPARTAMENTOS = {
     // alcampo: el defecto es el cajón que ya tenían, así que sólo se mueve lo
     // identificado.
     "Bollería, repostería y azúcar": "panaderia_bolleria",
+    "Conservas, caldos y cremas": "despensa",
+    "Aceites, salsas y especias": "despensa",
     "Galletas, cereales y mermeladas": "cereales_galletas",
     "Limpieza y hogar": "limpieza_drogueria",
     "Higiene y cuidado del cuerpo": "higiene_personal",
@@ -1078,6 +1175,23 @@ const POR_NOMBRE = [
   [palabras("esmalte de unas", "esmalte en gel", "maquillaje infantil"), "cosmetica_perfumeria"],
   [palabras("vela aromatica"), "pilas_iluminacion"],
   [palabras("helado", "polo", "sorbete", "granizado"), "congelados"],
+  // Guarda: el postre LÁCTEO manda sobre el chocolate, la galleta y el café que lleva
+  // dentro. Hace falta desde que la raíz de alcampo se resuelve por nombre, y va acá
+  // arriba porque tiene que adelantarse a las tres: el bloque de dulces va antes que la
+  // leche a propósito ("Chocolate con leche" es chocolate) y el del café es de los
+  // primeros. Medido: se llevaban 117 postres de nevera -- "Yogur de crema de
+  // chocolate", "Mousse de café", "Flan de café", "Pannacotta de café", "Yogur con
+  // trocitos de galletas".
+  //
+  // "mousse de" y no "mousse" a secas: en cosmética la mousse es una textura, y con la
+  // palabra suelta se venían 10 coloretes y cremas corporales a la nevera.
+  [palabras(
+    "yogur", "mousse de", "natilla", "flan", "cuajada", "kefir", "bifidus",
+    "pannacotta", "nata liquida", "postre lacteo", "bebida lactea", "preparado lacteo", "batido"
+  ), "lacteos_huevos"],
+  // Guarda: las bebidas vegetales se nombran por el cereal del que salen, así que
+  // tienen que decidirse antes que el pasillo del muesli. Son 115 productos.
+  [palabras("bebida vegetal", "bebida de avena", "bebida de soja", "bebida de almendra", "bebida de arroz", "bebida de coco", "bebida de anacardo"), "bebidas"],
   [palabras(
     "cafe", "cappuccino", "capuchino", "espresso", "ristretto", "macchiato",
     "latte", "te verde", "te rojo", "te negro", "te blanco", "rooibos",
@@ -1197,9 +1311,6 @@ const POR_NOMBRE = [
     "cana rellena", "flauta", "candeal", "masa madre", "levadura fresca", "obrador"
   ), "panaderia_bolleria"],
 
-  // Guarda: las bebidas vegetales se nombran por el cereal del que salen, así que
-  // tienen que decidirse antes que el pasillo del muesli. Son 115 productos.
-  [palabras("bebida vegetal", "bebida de avena", "bebida de soja", "bebida de almendra", "bebida de arroz", "bebida de coco", "bebida de anacardo"), "bebidas"],
 
   // --- Cereales y galletas. La galleta cae acá y no en panadería porque es lo que
   // declara POR_PALABRA (`galleta` -> cereales_galletas), y el bloque de panadería
@@ -1209,6 +1320,7 @@ const POR_NOMBRE = [
     "galleta", "cereal", "muesli", "granola", "copos de avena", "copos de maiz",
     "barrita de cereal", "barrita energetica", "salvado", "germen de trigo"
   ), "cereales_galletas"],
+
 
   // --- Dulces: lo distintivo. Va antes que los frutos secos por el mismo motivo
   // por el que va antes que la leche en el bloque de frescos: "Chocolate con

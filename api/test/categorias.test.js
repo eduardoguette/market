@@ -335,6 +335,90 @@ test("droguería y alcohol: se fusiona la redacción, no el uso ni el tipo", () 
   );
 });
 
+test("la regla más ancha del mapa también tenía subcadenas sueltas", () => {
+  // Segunda tanda de clase A, en la regla de despensa, que es la más ancha. Medido:
+  // 114 productos en el cajón equivocado.
+  const r = (supermercado, category, name) =>
+    categorias.resolve({ supermercado, category, name }).canonical;
+  // "especia" dentro de "especiales" / "especialidades".
+  assert.strictEqual(r("bm", "Sin lactosa y especiales", "Leche entera ecológica 1 l"), "lacteos_huevos");
+  assert.strictEqual(r("bm", "Especialidades", "Aceituna gordal aliñada sin hueso 400 g"), "snacks");
+  assert.strictEqual(r("mercadona", "Especias", "Pimentón dulce 75 g"), "despensa");
+  // "conserva" dentro de "conservación": film, aluminio y bolsas son papel y desechables.
+  assert.strictEqual(r("mercadona", "Menaje y conservación de alimentos", "Papel de aluminio Bosque Verde"), "papel_desechables");
+  assert.strictEqual(r("ahorramas", "Bolsas conservación alimentos", "Bolsa de congelación mediana"), "papel_desechables");
+  assert.strictEqual(r("dia", "Conservas, caldos y cremas", "Guisantes muy finos en conserva"), "despensa");
+  // El aceite y la crema CORPORALES son cosmética; la sal del LAVAVAJILLAS, droguería.
+  assert.strictEqual(r("bm", "Crema y aceite corporal", "Loción corporal reafirmante Q10 400 ml"), "cosmetica_perfumeria");
+  assert.strictEqual(r("ahorramas", "Limpiamáquinas, sal y otros aditivos", "Sal Lavavajillas Roca 2K"), "limpieza_drogueria");
+  assert.strictEqual(r("mercadona", "Aceite, vinagre y sal", "Aceite de oliva virgen extra 1 l"), "despensa");
+});
+
+test("el postre lácteo manda sobre el chocolate, la galleta y el café", () => {
+  // La raíz de alcampo pasó a resolverse por nombre, y el bloque de dulces va antes
+  // que la leche a propósito ("Chocolate con leche" es chocolate). Sin la guarda se
+  // llevaba 117 postres de nevera al pasillo de las tabletas.
+  const en = (name) => categorias.resolve({
+    supermercado: "alcampo",
+    category: "Leche, Huevos, Lácteos, Yogures y Bebidas vegetales",
+    name,
+  }).canonical;
+  assert.strictEqual(en("NESTLÉ Yogur de crema de chocolate con leche 4 x 125 g."), "lacteos_huevos");
+  assert.strictEqual(en("LA LECHERA Mousse de café de Nestlé 4 x 58 g."), "lacteos_huevos");
+  assert.strictEqual(en("REINA Flan de café Salzillo 4 x 100 g."), "lacteos_huevos");
+  assert.strictEqual(en("NESTLÉ Yogur natural azucarado con trocitos de galletas"), "lacteos_huevos");
+  // Y la bebida vegetal sigue siendo bebida, aunque sea "para el café".
+  assert.strictEqual(en("ALPRO Bebida de soja 100% vegetal, sin azúcar"), "bebidas");
+  // "mousse de" y no "mousse": en cosmética la mousse es una textura.
+  assert.strictEqual(
+    categorias.resolve({ supermercado: "alcampo", category: "Perfumeria", name: "ESSENCE Colorete en mousse con acabado mate" }).canonical,
+    "cosmetica_perfumeria"
+  );
+});
+
+test("despensa, lácteos e higiene: se fusiona la redacción, no la familia", () => {
+  const d = (n) => categorias.nombrePasillo(n, "despensa");
+  assert.strictEqual(d("Otras especias"), "Especias y sazonadores");
+  assert.strictEqual(d("Azafrán y pimentón"), "Especias y sazonadores");
+  assert.strictEqual(d("Mayonesa, ketchup y mostaza"), "Salsas y aliños");
+  assert.strictEqual(d("Gazpacho y cremas"), "Caldos, sopas y cremas");
+  // "Aceite, vinagre y sal" es el pasillo de los aceites: el aceite decide antes.
+  assert.strictEqual(d("Aceite, vinagre y sal"), "Aceites y vinagres");
+  assert.strictEqual(d("Sal y bicarbonato"), "Sal y bicarbonato");
+  // Y estos dos se quedan solos: el tomate frito es una compra propia y la cocina
+  // mejicana no es la oriental.
+  assert.strictEqual(d("Tomate frito"), "Tomate frito");
+  assert.strictEqual(d("Cocina mejicana"), null);
+  assert.strictEqual(d("Sabores de Asia"), "Cocina oriental");
+
+  const l = (n) => categorias.nombrePasillo(n, "lacteos_huevos");
+  assert.strictEqual(l("Yogur líquido"), "Yogures líquidos");
+  assert.strictEqual(l("Yogur sabores"), "Yogures con frutas y sabores");
+  assert.strictEqual(l("Flan y natillas"), "Postres lácteos");
+  assert.strictEqual(l("Semidesnatada"), "Leche y bebidas vegetales");
+  // Los tipos de yogur NO se fusionan: el usuario los elige.
+  assert.strictEqual(l("Yogur bífidus"), "Bífidus");
+  assert.strictEqual(l("Kéfir"), "Kéfir");
+  assert.strictEqual(l("Yogures griegos"), "Yogures griegos");
+  assert.notStrictEqual(
+    categorias.clavePasillo("Yogur desnatado", "lacteos_huevos"),
+    categorias.clavePasillo("Yogures griegos", "lacteos_huevos")
+  );
+  // Y "vegetal" va acotado a "yogur vegetal": suelto se tragaba las bebidas vegetales.
+  assert.strictEqual(l("Leche y bebidas vegetales"), "Leche y bebidas vegetales");
+
+  const h = (n) => categorias.nombrePasillo(n, "higiene_personal");
+  assert.strictEqual(h("Desodorante roll-on"), "Desodorante");
+  assert.strictEqual(h("Roll on"), "Desodorante");
+  assert.strictEqual(h("Dentífricos"), "Higiene bucal");
+  assert.strictEqual(h("Cepillos de dientes"), "Higiene bucal");
+  // La boca antes que el desodorante: esta etiqueta lleva "spray".
+  assert.strictEqual(h("Limpieza dentaduras postizas, spray bucal e hilo dental"), "Higiene bucal");
+  assert.strictEqual(h("Compresas y copa menstrual"), "Higiene íntima y compresas");
+  // GUARDA: el cabello de ángel es un dulce de obrador.
+  assert.strictEqual(h("Membrillo, cabello de ángel y polen"), null);
+});
+
 // --- fusión de pasillos: aves, conejo, panadería y cereales ---------------
 
 test("el nombre de un DEPARTAMENTO no es un nombre de pasillo", () => {
@@ -517,7 +601,7 @@ test("la fusión por palabra clave NO se aplica sin declarar el cajón", () => {
   // (34), "Yogures con frutas y sabores" (30) y "Estropajo, bayeta y guantes" (25,
   // por "ajo" dentro de "estropAJO") al pasillo de las verduras.
   assert.strictEqual(categorias.nombrePasillo("Refresco de naranja y de limón", "bebidas"), null);
-  assert.strictEqual(categorias.nombrePasillo("Yogures con frutas y sabores", "lacteos_huevos"), null);
+  assert.strictEqual(categorias.nombrePasillo("Yogures con frutas y sabores", FV), null);
   assert.strictEqual(categorias.nombrePasillo("Estropajo, bayeta y guantes", FV), null);
   assert.strictEqual(categorias.nombrePasillo("Ajo, perejil y orégano", FV), null);
   assert.strictEqual(categorias.nombrePasillo("Tomate", undefined), null);
