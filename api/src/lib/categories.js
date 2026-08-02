@@ -621,6 +621,73 @@ const PASILLOS_POR_PALABRA = {
     [/^(despensa|alimentacion|alimentacion saludable|especialidades|otros|varios)$/i, "Despensa"],
   ],
 
+  // Charcutería y quesos es el cajón más delicado del mapa, porque la mitad de sus
+  // filas son TIPOS de queso y ésos el usuario los elige: el de oveja no es el de
+  // cabra, y "Brie, camembert, comté, gruyere" no es "Emmental, edam, gouda, havarti".
+  // Se comprobó producto a producto antes de escribir nada, y por eso esas filas no
+  // aparecen en esta tabla: no se tocan.
+  //
+  // Lo que sí se fusiona es la redacción de las familias: cuatro nombres para el paté,
+  // cuatro para el queso en lonchas, tres para el embutido curado.
+  //
+  // LÍMITE CONOCIDO, y se deja documentado en vez de forzarlo: bm distingue el queso
+  // del embutido por el NÚMERO. "Curados" (19) son quesos y "Curado" (17) + "Otros
+  // curados" (7) son chorizo, cecina y salami. La clave mecánica une singular y plural
+  // a propósito -- es lo que hace que "Fruta" y "Frutas" sean una sola fila -- así que
+  // los tres caen juntos y ninguna regla escrita sobre la etiqueta puede separarlos.
+  // Se dejan sin regla: la fila conserva su nombre mayoritario ("Curados") y mezcla
+  // 43 productos de las dos familias, que en un cajón que ya se llama "Charcutería y
+  // quesos" es tolerable. Separarlos exigiría mirar el nombre del producto, que es la
+  // pasada de sub-pasillo que todavía no existe.
+  charcuteria_quesos: [
+    // Los tipos de queso, primero y SIN fusionar: son la guarda que protege las filas
+    // que no hay que tocar de las reglas genéricas de más abajo.
+    [/\boveja\b|\bcabra\b|\bazules?\b|emmental|edam|gouda|havarti|brie|camembert|comte|gruyere|parmesano|provolone|mozzarella|denominacion de origen/i, null],
+
+    // Quesos, por formato y curación.
+    [/queso\w*[^]*curad|^semicurados?$|curados y viejos/i, "Quesos curados y semicurados"],
+    [/loncha|rallado|porciones|para fundir/i, "Quesos en lonchas y rallados"],
+    [/untable|cremosos? y para untar|barra y fresco|fresco y especialidad/i, "Quesos untables y frescos"],
+    [/queso|mes del queso/i, "Quesos"],
+
+    // Charcutería, por familia.
+    [palabras("pate", "foie", "sobrasada"), "Patés y foie"],
+    [/ahumado|salazon/i, "Ahumados y salazones"],
+    [/jamon serrano|jamones? y paletas?|paleta curada|jamon curado/i, "Jamón y paleta curados"],
+    [/fiambre|cocido|chopped|mortadela|jamon york/i, "Fiambres y cocidos"],
+    [/embutido|fuet|longaniza|chorizo|salchichon|cecina|salami|^piezas$/i, "Embutido curado"],
+    [/^charcuteria$/i, "Charcutería"],
+  ],
+
+  // Cosmética: se fusiona la redacción y se respetan las zonas, que es como está
+  // montado el lineal y como compra la gente. "Labios", "Ojos" y "Uñas" no se juntan
+  // entre sí ni con el rostro, y "Manicura y pedicura" (los útiles) no se junta con
+  // "Uñas" (el esmalte): son dos compras distintas.
+  cosmetica_perfumeria: [
+    // GUARDA: el cuidado del cabello no es maquillaje, y "Accesorios pelo" lleva
+    // palabras que las reglas de abajo reclamarían.
+    [/accesorios? pelo|accesorios? cabello/i, "Accesorios para el pelo"],
+    [/coloracion|\btinte\b|decolora/i, "Coloración cabello"],
+    [/solar|aftersun|after sun|autobronceador/i, "Protección solar y aftersun"],
+    [/perfume|colonia|eau de|fragancia/i, "Perfumes y colonias"],
+    [/manicura|pedicura/i, "Manicura y pedicura"],
+    [/\bunas\b|esmalte|quitaesmalte/i, "Uñas"],
+    [/\blabios?\b|pintalabios|barra de labios|gloss/i, "Labios"],
+    [/\bojos?\b|pestana|ceja|delineador|eyeliner|rimel|mascara/i, "Ojos"],
+    [/afeitad|afeitar|barba|depilaci|depilator|\bcera\b|cuchilla|maquinilla/i, "Afeitado y depilación"],
+    [/antiarrug|antiedad|antimanchas/i, "Antiarrugas y antiedad"],
+    [/base de maquillaje|bases de maquillaje|corrector|colorete|polvos|maquillaje|rostro|iluminante/i, "Maquillaje rostro"],
+    // El CABELLO va antes que el rostro: "Acondicionador y mascarilla" y "Lociones y
+    // tratamientos capilares" son de pelo, y la regla facial de abajo dice "mascarilla"
+    // y "loción". Medido: se llevaba 98 productos capilares al pasillo de la cara.
+    [/acondicionador|capilar|champu|\bpelo\b|cabello|\blaca\b|espuma|gomina|fijacion|anticaspa/i, "Cuidado del cabello"],
+    // La limpieza facial y los desmaquillantes son su propia compra, no una crema.
+    [/desmaquillante|limpieza facial|limpiadora facial|limpiador facial|agua micelar/i, "Limpieza facial y desmaquillantes"],
+    [/crema facial|hidratante|contorno|serum|exfoliante|tonico|mascarilla|locion/i, "Cremas y tratamientos faciales"],
+    [/corporal|crema de manos|crema de pies|\bmanos\b/i, "Cuidado corporal y manos"],
+    [/^(cosmetica|cosmetica y perfumeria|belleza)$/i, "Cosmética y perfumería"],
+  ],
+
   // Droguería es el cajón con más filas del catálogo (97) y el reparto es el de
   // siempre: cuatro familias de verdad -- lavandería, limpiadores de superficie,
   // utensilios e insecticidas/ambientadores -- escritas de veinte formas entre seis

@@ -419,6 +419,58 @@ test("despensa, lácteos e higiene: se fusiona la redacción, no la familia", ()
   assert.strictEqual(h("Membrillo, cabello de ángel y polen"), null);
 });
 
+test("charcutería: se fusiona la redacción y NO se tocan los tipos de queso", () => {
+  const c = (n) => categorias.nombrePasillo(n, "charcuteria_quesos");
+  // Cuatro nombres para el paté, cuatro para el queso en lonchas, tres para el
+  // embutido curado.
+  assert.strictEqual(c("Foie y patés cárnicos"), "Patés y foie");
+  assert.strictEqual(c("Patés en conserva"), "Patés y foie");
+  assert.strictEqual(c("Queso lonchas, rallado y en porciones"), "Quesos en lonchas y rallados");
+  assert.strictEqual(c("Rallados y para fundir"), "Quesos en lonchas y rallados");
+  assert.strictEqual(c("Embutidos ibéricos"), "Embutido curado");
+  assert.strictEqual(c("Fuet y longaniza"), "Embutido curado");
+  assert.strictEqual(c("Jamón serrano"), "Jamón y paleta curados");
+  assert.strictEqual(c("Aves y jamón cocido"), "Fiambres y cocidos");
+  // Los TIPOS de queso no se tocan: el de oveja no es el de cabra.
+  for (const tipo of ["Oveja", "Cabra", "Azules", "Emmental, edam, gouda, havarti",
+                      "Brie, camembert, comté, gruyere", "Parmesano, provolone, mozzarella",
+                      "Denominación de origen"]) {
+    assert.strictEqual(c(tipo), null, tipo);
+  }
+  assert.notStrictEqual(
+    categorias.clavePasillo("Oveja", "charcuteria_quesos"),
+    categorias.clavePasillo("Cabra", "charcuteria_quesos")
+  );
+  // LÍMITE CONOCIDO: bm separa el queso del embutido por el número ("Curados" son
+  // quesos, "Curado" es chorizo), y la clave mecánica une singular y plural a
+  // propósito. Se dejan sin regla en vez de etiquetar mal a una de las dos familias.
+  assert.strictEqual(c("Curados"), null);
+  assert.strictEqual(c("Curado"), null);
+});
+
+test("cosmética: se respetan las zonas y el cabello gana al rostro", () => {
+  const k = (n) => categorias.nombrePasillo(n, "cosmetica_perfumeria");
+  assert.strictEqual(k("Coloración color rubio"), "Coloración cabello");
+  assert.strictEqual(k("Colonia Mujer"), "Perfumes y colonias");
+  assert.strictEqual(k("Cremas solares"), "Protección solar y aftersun");
+  // El cabello va antes que el rostro: estas dos dicen "mascarilla" y "loción", que
+  // son también palabras de la cara. Medido: 98 productos capilares en faciales.
+  assert.strictEqual(k("Acondicionador y mascarilla"), "Cuidado del cabello");
+  assert.strictEqual(k("Lociones y tratamientos capilares"), "Cuidado del cabello");
+  assert.strictEqual(k("Mascarillas y exfoliantes faciales"), "Cremas y tratamientos faciales");
+  // "Espuma de afeitar" es afeitado, no fijación: la regla dice "afeitar" y "afeitad".
+  assert.strictEqual(k("Espuma de afeitar"), "Afeitado y depilación");
+  assert.strictEqual(k("Cera, bandas y crema"), "Afeitado y depilación");
+  // Las zonas no se mezclan entre sí, y el esmalte no es el útil de manicura.
+  assert.strictEqual(k("Labios"), "Labios");
+  assert.strictEqual(k("Contorno de ojos"), "Ojos");
+  assert.strictEqual(k("Manicura"), "Manicura y pedicura");
+  assert.notStrictEqual(
+    categorias.clavePasillo("Uñas", "cosmetica_perfumeria"),
+    categorias.clavePasillo("Manicura y pedicura", "cosmetica_perfumeria")
+  );
+});
+
 // --- fusión de pasillos: aves, conejo, panadería y cereales ---------------
 
 test("el nombre de un DEPARTAMENTO no es un nombre de pasillo", () => {
